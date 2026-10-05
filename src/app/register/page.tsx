@@ -17,10 +17,10 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-
+import { useDepartments } from "@/hooks/api/useDepartments";
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 type RegisterRole = "STUDENT" | "FACULTY";
@@ -101,9 +101,18 @@ const registerSchema = z
 type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [departmentLoading, setDepartmentLoading] = useState(true);
-  const [departmentError, setDepartmentError] = useState("");
+  const {
+  data: departments = [],
+  isLoading: departmentLoading,
+  isError: departmentIsError,
+  error: departmentQueryError,
+} = useDepartments();
+
+const departmentError = departmentIsError
+  ? departmentQueryError instanceof Error
+    ? departmentQueryError.message
+    : "Failed to load departments."
+  : "";
 
   const [serverError, setServerError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -124,64 +133,7 @@ export default function RegisterPage() {
 
   const role = watch("role");
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadDepartments() {
-      try {
-        setDepartmentLoading(true);
-        setDepartmentError("");
-
-        const response = await fetch(
-          `${API_URL}/api/v1/departments`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            cache: "no-store",
-          },
-        );
-
-        const result: ApiResponse<Department[]> =
-          await response.json();
-
-        if (!response.ok) {
-          throw new Error(
-            result.message || "Failed to load departments.",
-          );
-        }
-
-        if (!Array.isArray(result.data)) {
-          throw new Error(
-            "Invalid departments response from backend.",
-          );
-        }
-
-        if (!cancelled) {
-          setDepartments(result.data);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setDepartmentError(
-            error instanceof Error
-              ? error.message
-              : "Failed to load departments.",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setDepartmentLoading(false);
-        }
-      }
-    }
-
-    loadDepartments();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  
 
   const onSubmit = async (values: RegisterFormData) => {
     try {
