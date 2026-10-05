@@ -462,6 +462,18 @@ export default function LoginPage() {
               </button>
             </form>
 
+            <div className="mt-6 text-center">
+  <p className="text-xs text-slate-600">
+    Don&apos;t have an account?{" "}
+    <Link
+      href="/register"
+      className="font-semibold text-cyan-300 transition hover:text-cyan-200"
+    >
+      Create account
+    </Link>
+  </p>
+</div>
+
             {/* Security note */}
             <div className="mt-7 flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
               <ShieldCheck
