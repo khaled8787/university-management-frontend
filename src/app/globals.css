@@ -162,3 +162,29 @@ select:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+.form-input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0 1rem;
+  height: 3rem;
+  color: white;
+  font-size: 0.875rem;
+  outline: none;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.form-input::placeholder {
+  color: rgb(71 85 105);
+}
+
+.form-input:focus {
+  border-color: rgba(103, 232, 249, 0.3);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 0 0 3px rgba(103, 232, 249, 0.04);
+}

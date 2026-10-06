@@ -1,6 +1,10 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
+import {
+  motion,
+  useReducedMotion,
+  type Variants,
+} from "framer-motion";
 import {
   ArrowUpRight,
   BookOpen,
@@ -49,16 +53,16 @@ const containerVariants = {
   },
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: {
     opacity: 0,
-    y: 18,
+    y: 20,
   },
   show: {
     opacity: 1,
     y: 0,
     transition: {
-      duration: 0.45,
+      duration: 0.5,
       ease: "easeOut",
     },
   },
