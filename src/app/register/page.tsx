@@ -20,37 +20,46 @@ import Link from "next/link";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+
 import { useDepartments } from "@/hooks/api/useDepartments";
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+import { useRegister } from "@/hooks/api/useAuth";
+import { getApiErrorMessage } from "@/lib/api";
 
 type RegisterRole = "STUDENT" | "FACULTY";
 
-interface Department {
-  id: string;
-  name: string;
-  code: string;
-}
-
-interface ApiResponse<T> {
-  success?: boolean;
-  message?: string;
-  data?: T;
-}
-
 const registerSchema = z
   .object({
-    name: z.string().min(2, "Name must be at least 2 characters."),
-    email: z.string().email("Enter a valid email address."),
+    name: z
+      .string()
+      .trim()
+      .min(2, "Name must be at least 2 characters.")
+      .max(100, "Name is too long."),
+
+    email: z
+      .string()
+      .trim()
+      .email("Enter a valid email address."),
+
     password: z
       .string()
-      .min(8, "Password must be at least 8 characters."),
+      .min(8, "Password must be at least 8 characters.")
+      .max(128, "Password is too long."),
+
     confirmPassword: z.string(),
+
     role: z.enum(["STUDENT", "FACULTY"]),
+
     studentId: z.string().optional(),
+
     batch: z.string().optional(),
+
     employeeId: z.string().optional(),
+
     designation: z.string().optional(),
-    departmentId: z.string().min(1, "Please select a department."),
+
+    departmentId: z
+      .string()
+      .min(1, "Please select a department."),
   })
   .superRefine((data, ctx) => {
     if (data.password !== data.confirmPassword) {
@@ -102,17 +111,13 @@ type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
   const {
-  data: departments = [],
-  isLoading: departmentLoading,
-  isError: departmentIsError,
-  error: departmentQueryError,
-} = useDepartments();
+    data: departments = [],
+    isLoading: departmentLoading,
+    isError: departmentIsError,
+    error: departmentQueryError,
+  } = useDepartments();
 
-const departmentError = departmentIsError
-  ? departmentQueryError instanceof Error
-    ? departmentQueryError.message
-    : "Failed to load departments."
-  : "";
+  const registerMutation = useRegister();
 
   const [serverError, setServerError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -122,80 +127,94 @@ const departmentError = departmentIsError
     handleSubmit,
     watch,
     setValue,
+    resetField,
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
+
     defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
       role: "STUDENT",
+      studentId: "",
+      batch: "",
+      employeeId: "",
+      designation: "",
       departmentId: "",
     },
+
+    mode: "onTouched",
   });
 
   const role = watch("role");
 
-  
+  const departmentError = departmentIsError
+    ? departmentQueryError instanceof Error
+      ? departmentQueryError.message
+      : "Failed to load departments."
+    : "";
+
+  const isLoading =
+    isSubmitting || registerMutation.isPending;
+
+  function handleRoleChange(nextRole: RegisterRole) {
+    setServerError("");
+    setSuccessMessage("");
+
+    setValue("role", nextRole, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+
+    if (nextRole === "STUDENT") {
+      resetField("employeeId");
+      resetField("designation");
+    }
+
+    if (nextRole === "FACULTY") {
+      resetField("studentId");
+      resetField("batch");
+    }
+  }
 
   const onSubmit = async (values: RegisterFormData) => {
+    setServerError("");
+    setSuccessMessage("");
+
     try {
-      setServerError("");
-      setSuccessMessage("");
-
-      if (!API_URL) {
-        throw new Error(
-          "NEXT_PUBLIC_API_URL is not configured.",
-        );
-      }
-
-      const payload =
-        values.role === "STUDENT"
-          ? {
-              name: values.name.trim(),
-              email: values.email.trim(),
-              password: values.password,
-              role: "STUDENT",
-              studentId: values.studentId!.trim(),
-              batch: values.batch!.trim(),
-              departmentId: values.departmentId,
-            }
-          : {
-              name: values.name.trim(),
-              email: values.email.trim(),
-              password: values.password,
-              role: "FACULTY",
-              employeeId: values.employeeId!.trim(),
-              designation: values.designation!.trim(),
-              departmentId: values.departmentId,
-            };
-
-      const response = await fetch(
-        `${API_URL}/api/v1/auth/register`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        },
-      );
-
-      const result: ApiResponse<unknown> =
-        await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          result.message || "Registration failed.",
-        );
+      if (values.role === "STUDENT") {
+        await registerMutation.mutateAsync({
+          name: values.name.trim(),
+          email: values.email.trim(),
+          password: values.password,
+          role: "STUDENT",
+          studentId: values.studentId!.trim(),
+          batch: values.batch!.trim(),
+          departmentId: values.departmentId,
+        });
+      } else {
+        await registerMutation.mutateAsync({
+          name: values.name.trim(),
+          email: values.email.trim(),
+          password: values.password,
+          role: "FACULTY",
+          employeeId: values.employeeId!.trim(),
+          designation: values.designation!.trim(),
+          departmentId: values.departmentId,
+        });
       }
 
       setSuccessMessage(
-        result.message ||
-          "Registration successful. You can now sign in.",
+        "Registration successful. Your university account has been created.",
       );
     } catch (error) {
       setServerError(
-        error instanceof Error
-          ? error.message
-          : "Registration failed. Please try again.",
+        getApiErrorMessage(
+          error,
+          "Registration failed. Please check your information and try again.",
+        ),
       );
     }
   };
@@ -205,6 +224,7 @@ const departmentError = departmentIsError
       {/* Ambient background */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute left-[-12%] top-[-10%] h-80 w-80 rounded-full bg-primary/15 blur-[120px]" />
+
         <div className="absolute bottom-[-15%] right-[-10%] h-96 w-96 rounded-full bg-secondary/15 blur-[140px]" />
 
         <div className="grid-background absolute inset-0 opacity-30" />
@@ -212,7 +232,7 @@ const departmentError = departmentIsError
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-7xl items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
         <div className="grid w-full max-w-6xl gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
-          {/* Left */}
+          {/* Left information panel */}
           <motion.section
             initial={{ opacity: 0, x: -30 }}
             animate={{ opacity: 1, x: 0 }}
@@ -278,7 +298,7 @@ const departmentError = departmentIsError
             </div>
           </motion.section>
 
-          {/* Register card */}
+          {/* Registration card */}
           <motion.section
             initial={{ opacity: 0, y: 25 }}
             animate={{ opacity: 1, y: 0 }}
@@ -302,6 +322,7 @@ const departmentError = departmentIsError
                 </Link>
               </div>
 
+              {/* Header */}
               <div className="mb-8">
                 <p className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
                   Create account
@@ -317,24 +338,44 @@ const departmentError = departmentIsError
                 </p>
               </div>
 
+              {/* Alerts */}
               <AnimatePresence mode="wait">
                 {serverError && (
                   <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
+                    initial={{
+                      opacity: 0,
+                      y: -10,
+                    }}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                    }}
+                    exit={{
+                      opacity: 0,
+                      y: -10,
+                    }}
                     className="mb-5 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300"
                   >
                     <X className="mt-0.5 size-4 shrink-0" />
+
                     <span>{serverError}</span>
                   </motion.div>
                 )}
 
                 {successMessage && (
                   <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
+                    initial={{
+                      opacity: 0,
+                      y: -10,
+                    }}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                    }}
+                    exit={{
+                      opacity: 0,
+                      y: -10,
+                    }}
                     className="mb-5 flex items-start gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-300"
                   >
                     <Check className="mt-0.5 size-4 shrink-0" />
@@ -353,6 +394,7 @@ const departmentError = departmentIsError
                 )}
               </AnimatePresence>
 
+              {/* Form */}
               <form
                 onSubmit={handleSubmit(onSubmit)}
                 className="space-y-5"
@@ -369,9 +411,7 @@ const departmentError = departmentIsError
                       icon={GraduationCap}
                       title="Student"
                       onClick={() =>
-                        setValue("role", "STUDENT", {
-                          shouldValidate: true,
-                        })
+                        handleRoleChange("STUDENT")
                       }
                     />
 
@@ -380,9 +420,7 @@ const departmentError = departmentIsError
                       icon={Users}
                       title="Faculty"
                       onClick={() =>
-                        setValue("role", "FACULTY", {
-                          shouldValidate: true,
-                        })
+                        handleRoleChange("FACULTY")
                       }
                     />
                   </div>
@@ -393,6 +431,7 @@ const departmentError = departmentIsError
                   label="Full name"
                   icon={User}
                   placeholder="Your full name"
+                  autoComplete="name"
                   error={errors.name?.message}
                   {...register("name")}
                 />
@@ -403,24 +442,36 @@ const departmentError = departmentIsError
                   icon={Mail}
                   type="email"
                   placeholder="you@university.com"
+                  autoComplete="email"
                   error={errors.email?.message}
                   {...register("email")}
                 />
 
-                {/* Role-specific */}
+                {/* Role-specific fields */}
                 <AnimatePresence mode="wait">
                   {role === "STUDENT" ? (
                     <motion.div
                       key="student"
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="grid gap-5 sm:grid-cols-2"
+                      initial={{
+                        opacity: 0,
+                        height: 0,
+                      }}
+                      animate={{
+                        opacity: 1,
+                        height: "auto",
+                      }}
+                      exit={{
+                        opacity: 0,
+                        height: 0,
+                      }}
+                      className="grid gap-5 overflow-hidden sm:grid-cols-2"
                     >
                       <Input
                         label="Student ID"
                         placeholder="STU-1001"
-                        error={errors.studentId?.message}
+                        error={
+                          errors.studentId?.message
+                        }
                         {...register("studentId")}
                       />
 
@@ -434,22 +485,35 @@ const departmentError = departmentIsError
                   ) : (
                     <motion.div
                       key="faculty"
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="grid gap-5 sm:grid-cols-2"
+                      initial={{
+                        opacity: 0,
+                        height: 0,
+                      }}
+                      animate={{
+                        opacity: 1,
+                        height: "auto",
+                      }}
+                      exit={{
+                        opacity: 0,
+                        height: 0,
+                      }}
+                      className="grid gap-5 overflow-hidden sm:grid-cols-2"
                     >
                       <Input
                         label="Employee ID"
                         placeholder="FAC-1001"
-                        error={errors.employeeId?.message}
+                        error={
+                          errors.employeeId?.message
+                        }
                         {...register("employeeId")}
                       />
 
                       <Input
                         label="Designation"
                         placeholder="Lecturer"
-                        error={errors.designation?.message}
+                        error={
+                          errors.designation?.message
+                        }
                         {...register("designation")}
                       />
                     </motion.div>
@@ -467,7 +531,8 @@ const departmentError = departmentIsError
                       {...register("departmentId")}
                       disabled={
                         departmentLoading ||
-                        departments.length === 0
+                        departments.length === 0 ||
+                        isLoading
                       }
                       className="h-12 w-full appearance-none rounded-xl border border-white/10 bg-black/20 px-4 pr-11 text-sm outline-none transition focus:border-primary/60 focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
                     >
@@ -485,7 +550,8 @@ const departmentError = departmentIsError
                           value={department.id}
                           className="bg-slate-950"
                         >
-                          {department.name} ({department.code})
+                          {department.name} (
+                          {department.code})
                         </option>
                       ))}
                     </select>
@@ -512,6 +578,7 @@ const departmentError = departmentIsError
                   icon={LockKeyhole}
                   type="password"
                   placeholder="Minimum 8 characters"
+                  autoComplete="new-password"
                   error={errors.password?.message}
                   {...register("password")}
                 />
@@ -522,20 +589,25 @@ const departmentError = departmentIsError
                   icon={LockKeyhole}
                   type="password"
                   placeholder="Repeat your password"
-                  error={errors.confirmPassword?.message}
+                  autoComplete="new-password"
+                  error={
+                    errors.confirmPassword?.message
+                  }
                   {...register("confirmPassword")}
                 />
 
+                {/* Submit */}
                 <button
                   type="submit"
                   disabled={
-                    isSubmitting ||
+                    isLoading ||
                     departmentLoading ||
-                    departments.length === 0
+                    departments.length === 0 ||
+                    !!departmentError
                   }
                   className="group flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30 disabled:pointer-events-none disabled:opacity-60"
                 >
-                  {isSubmitting ? (
+                  {isLoading ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
                       Creating account...
@@ -543,12 +615,14 @@ const departmentError = departmentIsError
                   ) : (
                     <>
                       Create account
+
                       <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
                     </>
                   )}
                 </button>
               </form>
 
+              {/* Login link */}
               <div className="mt-7 text-center text-sm text-muted-foreground">
                 Already have an account?{" "}
                 <Link
@@ -565,6 +639,10 @@ const departmentError = departmentIsError
     </main>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Feature                                                                    */
+/* -------------------------------------------------------------------------- */
 
 function Feature({
   icon: Icon,
@@ -583,6 +661,7 @@ function Feature({
 
       <div>
         <p className="font-semibold">{title}</p>
+
         <p className="mt-1 text-sm leading-6 text-muted-foreground">
           {description}
         </p>
@@ -590,6 +669,10 @@ function Feature({
     </div>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Role Button                                                                */
+/* -------------------------------------------------------------------------- */
 
 function RoleButton({
   active,
@@ -606,6 +689,7 @@ function RoleButton({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={`flex h-16 items-center gap-3 rounded-2xl border px-4 text-left transition-all ${
         active
           ? "border-primary/50 bg-primary/10 text-primary shadow-lg shadow-primary/10"
@@ -621,7 +705,9 @@ function RoleButton({
       </div>
 
       <div>
-        <p className="text-sm font-semibold">{title}</p>
+        <p className="text-sm font-semibold">
+          {title}
+        </p>
 
         {active && (
           <p className="text-[10px] uppercase tracking-wider opacity-70">
@@ -633,16 +719,23 @@ function RoleButton({
   );
 }
 
-const Input = ({
+/* -------------------------------------------------------------------------- */
+/* Input                                                                      */
+/* -------------------------------------------------------------------------- */
+
+type InputProps =
+  React.InputHTMLAttributes<HTMLInputElement> & {
+    label: string;
+    icon?: typeof User;
+    error?: string;
+  };
+
+function Input({
   label,
   icon: Icon,
   error,
   ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & {
-  label: string;
-  icon?: typeof User;
-  error?: string;
-}) => {
+}: InputProps) {
   return (
     <div>
       <label className="mb-2 block text-sm font-medium">
@@ -673,4 +766,4 @@ const Input = ({
       )}
     </div>
   );
-};
+}

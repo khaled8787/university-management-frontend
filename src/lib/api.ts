@@ -38,17 +38,27 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      logout();
+      const pathname =
+        typeof window !== "undefined"
+          ? window.location.pathname
+          : "";
 
-      if (
-        typeof window !== "undefined" &&
-        window.location.pathname !== "/login"
-      ) {
-        const redirect = encodeURIComponent(
-          window.location.pathname,
-        );
+      // Public pages should never be redirected to login
+      if (pathname === "/login" || pathname === "/register") {
+        return Promise.reject(error);
+      }
 
-        window.location.href = `/login?redirect=${redirect}`;
+      const accessToken = getAccessToken();
+
+      // Only redirect when an authenticated session exists
+      if (accessToken) {
+        logout();
+
+        if (typeof window !== "undefined") {
+          const redirect = encodeURIComponent(pathname);
+
+          window.location.href = `/login?redirect=${redirect}`;
+        }
       }
     }
 

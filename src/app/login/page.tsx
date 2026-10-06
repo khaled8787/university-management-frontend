@@ -1,5 +1,5 @@
 "use client";
-import { setAuthSession } from "@/lib/auth";
+
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -16,10 +16,13 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+
+import { useLogin } from "@/hooks/api/useAuth";
+import { getDashboardPath, setAuthSession } from "@/lib/auth";
 
 const loginSchema = z.object({
   email: z
@@ -34,44 +37,15 @@ const loginSchema = z.object({
 
 type LoginValues = z.infer<typeof loginSchema>;
 
-type UserRole = "ADMIN" | "FACULTY" | "STUDENT";
-
-type AuthUser = {
-  id: string;
-  name?: string;
-  email: string;
-  role: UserRole;
-};
-
-type LoginResponse = {
-  success?: boolean;
-  message?: string;
-  data?: {
-    user?: AuthUser;
-    accessToken?: string;
-    refreshToken?: string;
-  };
-};
-
-function getDashboardPath(role: UserRole) {
-  switch (role) {
-    case "ADMIN":
-      return "/admin/dashboard";
-
-    case "FACULTY":
-      return "/faculty/dashboard";
-
-    case "STUDENT":
-      return "/student/dashboard";
-  }
-}
-
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const reduceMotion = useReducedMotion();
 
   const [showPassword, setShowPassword] = useState(false);
   const [apiError, setApiError] = useState("");
+
+  const loginMutation = useLogin();
 
   const {
     register,
@@ -86,38 +60,17 @@ export default function LoginPage() {
     mode: "onTouched",
   });
 
+  const isLoading =
+    isSubmitting || loginMutation.isPending;
+
   async function onSubmit(values: LoginValues) {
     setApiError("");
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
-
-    if (!baseUrl) {
-      setApiError(
-        "Backend URL is not configured. Add NEXT_PUBLIC_API_URL to .env.local and restart the development server.",
-      );
-      return;
-    }
-
     try {
-      const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: values.email,
-          password: values.password,
-        }),
-        cache: "no-store",
+      const result = await loginMutation.mutateAsync({
+        email: values.email.trim(),
+        password: values.password,
       });
-
-      const result = (await response.json()) as LoginResponse;
-
-      if (!response.ok) {
-        throw new Error(
-          result.message || "Login failed. Please check your credentials.",
-        );
-      }
 
       const user = result.data?.user;
       const accessToken = result.data?.accessToken;
@@ -125,24 +78,45 @@ export default function LoginPage() {
 
       if (!user || !accessToken || !refreshToken) {
         throw new Error(
-          "The backend returned an incomplete login response. Please check the API response format.",
+          "The backend returned an incomplete login response.",
         );
       }
 
-      if (!["ADMIN", "FACULTY", "STUDENT"].includes(user.role)) {
-        throw new Error("Your account has an unsupported user role.");
+      if (
+        !["ADMIN", "FACULTY", "STUDENT"].includes(
+          user.role,
+        )
+      ) {
+        throw new Error(
+          "Your account has an unsupported user role.",
+        );
       }
 
-      setAuthSession(accessToken, refreshToken, user);
+      setAuthSession(
+        accessToken,
+        refreshToken,
+        user,
+      );
 
-      router.push(getDashboardPath(user.role));
+      const redirect = searchParams.get("redirect");
+
+      const dashboardPath = getDashboardPath(
+        user.role,
+      );
+
+      const destination =
+        redirect &&
+        redirect.startsWith("/") &&
+        !redirect.startsWith("//")
+          ? redirect
+          : dashboardPath;
+
+      router.replace(destination);
     } catch (error) {
       setApiError(
-        error instanceof TypeError
-          ? "Cannot connect to the backend. Check the API URL, backend status, and CORS configuration."
-          : error instanceof Error
-            ? error.message
-            : "Something went wrong. Please try again.",
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again.",
       );
     }
   }
@@ -201,9 +175,16 @@ export default function LoginPage() {
       <div className="relative mx-auto grid w-full max-w-[1440px] items-center gap-12 px-5 pb-16 pt-8 sm:px-8 md:px-12 lg:min-h-[calc(100vh-80px)] lg:grid-cols-[1fr_0.92fr] lg:gap-20 lg:px-16 lg:pb-20 lg:pt-4">
         {/* Left content */}
         <motion.section
-          initial={reduceMotion ? false : { opacity: 0, y: 20 }}
+          initial={
+            reduceMotion
+              ? false
+              : { opacity: 0, y: 20 }
+          }
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: "easeOut" }}
+          transition={{
+            duration: 0.7,
+            ease: "easeOut",
+          }}
           className="mx-auto w-full max-w-xl"
         >
           <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-cyan-200/15 bg-cyan-200/[0.05] px-3.5 py-2 text-xs font-medium text-cyan-100">
@@ -216,12 +197,15 @@ export default function LoginPage() {
             <br />
             chapter
             <br />
-            <span className="gradient-text">starts here.</span>
+            <span className="gradient-text">
+              starts here.
+            </span>
           </h1>
 
           <p className="mt-6 max-w-md text-base leading-8 text-slate-400 sm:text-lg">
-            Sign in to discover a more connected university experience. Your
-            courses, campus community, and academic journey — all in one
+            Sign in to discover a more connected
+            university experience. Your courses, campus
+            community, and academic journey — all in one
             place.
           </p>
 
@@ -231,12 +215,14 @@ export default function LoginPage() {
               {
                 icon: Fingerprint,
                 title: "One secure identity",
-                detail: "Your access follows your assigned role.",
+                detail:
+                  "Your access follows your assigned role.",
               },
               {
                 icon: Users,
                 title: "One campus community",
-                detail: "A connected experience for every role.",
+                detail:
+                  "A connected experience for every role.",
               },
             ].map((feature, index) => {
               const Icon = feature.icon;
@@ -244,8 +230,15 @@ export default function LoginPage() {
               return (
                 <motion.div
                   key={feature.title}
-                  initial={reduceMotion ? false : { opacity: 0, x: -12 }}
-                  animate={{ opacity: 1, x: 0 }}
+                  initial={
+                    reduceMotion
+                      ? false
+                      : { opacity: 0, x: -12 }
+                  }
+                  animate={{
+                    opacity: 1,
+                    x: 0,
+                  }}
                   transition={{
                     delay: 0.15 + index * 0.12,
                     duration: 0.5,
@@ -253,7 +246,10 @@ export default function LoginPage() {
                   className="flex items-center gap-4"
                 >
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.035] text-cyan-200">
-                    <Icon size={20} strokeWidth={1.6} />
+                    <Icon
+                      size={20}
+                      strokeWidth={1.6}
+                    />
                   </div>
 
                   <div>
@@ -309,7 +305,10 @@ export default function LoginPage() {
             {/* Card heading */}
             <div className="mb-8">
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-200/15 bg-cyan-200/[0.06] text-cyan-200">
-                <ShieldCheck size={21} strokeWidth={1.5} />
+                <ShieldCheck
+                  size={21}
+                  strokeWidth={1.5}
+                />
               </div>
 
               <p className="text-xs font-medium tracking-[0.22em] text-cyan-200">
@@ -321,13 +320,23 @@ export default function LoginPage() {
               </h2>
 
               <p className="mt-2 text-sm leading-6 text-slate-400">
-                Enter your credentials to access your campus.
+                Enter your credentials to access your
+                campus.
               </p>
             </div>
 
             {/* API error */}
             {apiError && (
-              <div
+              <motion.div
+                initial={
+                  reduceMotion
+                    ? false
+                    : { opacity: 0, y: -8 }
+                }
+                animate={{
+                  opacity: 1,
+                  y: 0,
+                }}
                 role="alert"
                 className="mb-5 flex gap-3 rounded-2xl border border-rose-300/20 bg-rose-300/[0.06] p-4 text-sm text-rose-100"
               >
@@ -336,8 +345,10 @@ export default function LoginPage() {
                   className="mt-0.5 shrink-0 text-rose-300"
                 />
 
-                <p className="leading-6">{apiError}</p>
-              </div>
+                <p className="leading-6">
+                  {apiError}
+                </p>
+              </motion.div>
             )}
 
             {/* Login form */}
@@ -362,9 +373,11 @@ export default function LoginPage() {
                   placeholder="you@university.com"
                   aria-invalid={Boolean(errors.email)}
                   aria-describedby={
-                    errors.email ? "email-error" : undefined
+                    errors.email
+                      ? "email-error"
+                      : undefined
                   }
-                  disabled={isSubmitting}
+                  disabled={isLoading}
                   {...register("email")}
                   className="min-h-12 w-full rounded-xl border border-white/[0.10] bg-[#080d18]/80 px-4 text-sm text-white outline-none transition placeholder:text-slate-600 hover:border-white/20 focus:border-cyan-200/50 focus:ring-4 focus:ring-cyan-200/[0.06] disabled:opacity-60"
                 />
@@ -397,26 +410,41 @@ export default function LoginPage() {
                 <div className="relative">
                   <input
                     id="password"
-                    type={showPassword ? "text" : "password"}
+                    type={
+                      showPassword
+                        ? "text"
+                        : "password"
+                    }
                     autoComplete="current-password"
                     placeholder="Enter your password"
-                    aria-invalid={Boolean(errors.password)}
+                    aria-invalid={Boolean(
+                      errors.password,
+                    )}
                     aria-describedby={
-                      errors.password ? "password-error" : undefined
+                      errors.password
+                        ? "password-error"
+                        : undefined
                     }
-                    disabled={isSubmitting}
+                    disabled={isLoading}
                     {...register("password")}
                     className="min-h-12 w-full rounded-xl border border-white/[0.10] bg-[#080d18]/80 px-4 pr-12 text-sm text-white outline-none transition placeholder:text-slate-600 hover:border-white/20 focus:border-cyan-200/50 focus:ring-4 focus:ring-cyan-200/[0.06] disabled:opacity-60"
                   />
 
                   <button
                     type="button"
-                    onClick={() => setShowPassword((visible) => !visible)}
+                    onClick={() =>
+                      setShowPassword(
+                        (visible) => !visible,
+                      )
+                    }
                     aria-label={
-                      showPassword ? "Hide password" : "Show password"
+                      showPassword
+                        ? "Hide password"
+                        : "Show password"
                     }
                     aria-pressed={showPassword}
-                    className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-400 transition hover:text-cyan-200"
+                    disabled={isLoading}
+                    className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-400 transition hover:text-cyan-200 disabled:opacity-50"
                   >
                     {showPassword ? (
                       <EyeOff size={18} />
@@ -439,10 +467,10 @@ export default function LoginPage() {
               {/* Submit */}
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isLoading}
                 className="group flex min-h-13 w-full items-center justify-center gap-3 rounded-xl bg-cyan-300 px-5 py-3.5 text-sm font-semibold text-slate-950 shadow-[0_0_30px_rgba(103,232,249,0.12)] transition duration-300 hover:-translate-y-0.5 hover:bg-cyan-200 hover:shadow-[0_0_40px_rgba(103,232,249,0.2)] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSubmitting ? (
+                {isLoading ? (
                   <>
                     <LoaderCircle
                       size={18}
@@ -462,17 +490,18 @@ export default function LoginPage() {
               </button>
             </form>
 
+            {/* Register */}
             <div className="mt-6 text-center">
-  <p className="text-xs text-slate-600">
-    Don&apos;t have an account?{" "}
-    <Link
-      href="/register"
-      className="font-semibold text-cyan-300 transition hover:text-cyan-200"
-    >
-      Create account
-    </Link>
-  </p>
-</div>
+              <p className="text-xs text-slate-600">
+                Don&apos;t have an account?{" "}
+                <Link
+                  href="/register"
+                  className="font-semibold text-cyan-300 transition hover:text-cyan-200"
+                >
+                  Create account
+                </Link>
+              </p>
+            </div>
 
             {/* Security note */}
             <div className="mt-7 flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
@@ -482,14 +511,15 @@ export default function LoginPage() {
               />
 
               <p className="text-[11px] leading-5 text-slate-500">
-                Your access level is determined securely by your account
-                role.
+                Your access level is determined securely
+                by your account role.
               </p>
             </div>
           </div>
 
           <p className="mt-5 text-center text-xs text-slate-600">
-            Protected by role-based access · NEXUS University System
+            Protected by role-based access · NEXUS
+            University System
           </p>
         </motion.section>
       </div>
