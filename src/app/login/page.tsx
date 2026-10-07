@@ -20,7 +20,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-
+import { Suspense } from "react";
 import { useLogin } from "@/hooks/api/useAuth";
 import { getDashboardPath, setAuthSession } from "@/lib/auth";
 
@@ -37,7 +37,7 @@ const loginSchema = z.object({
 
 type LoginValues = z.infer<typeof loginSchema>;
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const reduceMotion = useReducedMotion();
@@ -524,5 +524,19 @@ export default function LoginPage() {
         </motion.section>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-[#020617]">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+        </div>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }

@@ -1,13 +1,24 @@
 "use client";
 
 import {
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  motion,
+  useReducedMotion,
+  type Variants,
+} from "framer-motion";
+
+import {
+  Activity,
   AlertCircle,
   CalendarDays,
   CheckCircle2,
   Clock3,
   Eye,
   Loader2,
-  Plus,
   RefreshCw,
   Search,
   Trash2,
@@ -15,9 +26,6 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-
-import { motion, type Variants } from "framer-motion";
-import { useMemo, useState } from "react";
 
 import {
   useAttendance,
@@ -28,12 +36,20 @@ import {
   type AttendanceStatus,
 } from "@/hooks/api/useAttendance";
 
+const STATUS_OPTIONS: Array<
+  AttendanceStatus | "ALL"
+> = [
+  "ALL",
+  "PRESENT",
+  "ABSENT",
+  "LATE",
+];
+
 const itemVariants: Variants = {
   hidden: {
     opacity: 0,
     y: 18,
   },
-
   show: {
     opacity: 1,
     y: 0,
@@ -44,53 +60,20 @@ const itemVariants: Variants = {
   },
 };
 
-const statusConfig: Record<
-  AttendanceStatus,
-  {
-    label: string;
-    className: string;
-    icon: typeof CheckCircle2;
-  }
-> = {
-  PRESENT: {
-    label: "Present",
-    className:
-      "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
-    icon: CheckCircle2,
-  },
+function formatDate(date?: string) {
+  if (!date) return "—";
 
-  ABSENT: {
-    label: "Absent",
-    className:
-      "border-rose-400/20 bg-rose-400/10 text-rose-300",
-    icon: XCircle,
-  },
-
-  LATE: {
-    label: "Late",
-    className:
-      "border-amber-400/20 bg-amber-400/10 text-amber-300",
-    icon: Clock3,
-  },
-};
-
-function formatDate(value?: string) {
-  if (!value) return "—";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      dateStyle: "medium",
+    },
+  ).format(new Date(date));
 }
 
-function getStudentName(attendance: Attendance) {
+function getStudentName(
+  attendance: Attendance,
+) {
   return (
     attendance.student?.name ||
     attendance.student?.email ||
@@ -98,35 +81,126 @@ function getStudentName(attendance: Attendance) {
   );
 }
 
-function getCourseName(attendance: Attendance) {
+function getCourseName(
+  attendance: Attendance,
+) {
+  if (attendance.course?.code) {
+    return attendance.course.code;
+  }
+
   return (
     attendance.course?.title ||
     attendance.course?.name ||
-    attendance.course?.code ||
     attendance.courseId
   );
 }
 
-function getFacultyName(attendance: Attendance) {
+function getStatusClasses(
+  status: AttendanceStatus,
+) {
+  switch (status) {
+    case "PRESENT":
+      return "border-emerald-400/20 bg-emerald-400/10 text-emerald-300";
+
+    case "ABSENT":
+      return "border-rose-400/20 bg-rose-400/10 text-rose-300";
+
+    case "LATE":
+      return "border-amber-400/20 bg-amber-400/10 text-amber-300";
+
+    default:
+      return "border-white/10 bg-white/5 text-white/70";
+  }
+}
+
+function StatusIcon({
+  status,
+}: {
+  status: AttendanceStatus;
+}) {
+  if (status === "PRESENT") {
+    return <CheckCircle2 size={14} />;
+  }
+
+  if (status === "ABSENT") {
+    return <XCircle size={14} />;
+  }
+
+  return <Clock3 size={14} />;
+}
+
+function StatCard({
+  label,
+  value,
+  icon,
+  accent,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  accent: string;
+}) {
   return (
-    attendance.faculty?.name ||
-    attendance.faculty?.email ||
-    attendance.facultyId
+    <motion.div
+      variants={itemVariants}
+      className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] p-5 backdrop-blur-xl"
+    >
+      <div
+        className={`absolute -right-10 -top-10 h-28 w-28 rounded-full blur-3xl ${accent}`}
+      />
+
+      <div className="relative flex items-start justify-between">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-white/40">
+            {label}
+          </p>
+
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-white">
+            {value}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-cyan-300">
+          {icon}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function AttendanceSkeleton() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 6 }).map(
+        (_, index) => (
+          <div
+            key={index}
+            className="h-20 animate-pulse rounded-2xl border border-white/5 bg-white/[0.025]"
+          />
+        ),
+      )}
+    </div>
   );
 }
 
 export default function AdminAttendancePage() {
-  const [statusFilter, setStatusFilter] =
-    useState<AttendanceStatus | undefined>();
+  const reduceMotion = useReducedMotion();
 
-  const [search, setSearch] = useState("");
+  const [status, setStatus] =
+    useState<AttendanceStatus | "ALL">(
+      "ALL",
+    );
+
+  const [search, setSearch] =
+    useState("");
+
   const [selectedId, setSelectedId] =
     useState<string | null>(null);
 
-  const [deleteId, setDeleteId] =
+  const [editingId, setEditingId] =
     useState<string | null>(null);
 
-  const [editId, setEditId] =
+  const [deleteId, setDeleteId] =
     useState<string | null>(null);
 
   const [editStatus, setEditStatus] =
@@ -135,13 +209,20 @@ export default function AdminAttendancePage() {
   const [editRemarks, setEditRemarks] =
     useState("");
 
+  const currentFilter =
+    status === "ALL"
+      ? undefined
+      : status;
+
   const {
     data: attendances = [],
     isLoading,
     isError,
+    error,
     refetch,
     isFetching,
-  } = useAttendances(statusFilter);
+  } =
+    useAttendances(currentFilter);
 
   const selectedAttendance =
     useAttendance(selectedId);
@@ -152,114 +233,147 @@ export default function AdminAttendancePage() {
   const deleteMutation =
     useDeleteAttendance();
 
-  const filteredAttendances = useMemo(() => {
-    const query = search.trim().toLowerCase();
+  const filteredAttendances =
+    useMemo(() => {
+      const query =
+        search.trim().toLowerCase();
 
-    if (!query) {
-      return attendances;
-    }
+      if (!query) return attendances;
 
-    return attendances.filter((attendance) => {
-      const searchable = [
-        attendance.id,
-        attendance.studentId,
-        attendance.courseId,
-        attendance.facultyId,
-        attendance.student?.name,
-        attendance.student?.email,
-        attendance.student?.studentId,
-        attendance.course?.code,
-        attendance.course?.title,
-        attendance.course?.name,
-        attendance.faculty?.name,
-        attendance.faculty?.email,
-        attendance.faculty?.employeeId,
-        attendance.remarks,
-        attendance.status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      return attendances.filter(
+        (attendance) => {
+          return [
+            attendance.id,
+            attendance.studentId,
+            attendance.courseId,
+            attendance.facultyId,
+            attendance.student?.name,
+            attendance.student?.email,
+            attendance.student?.studentId,
+            attendance.course?.code,
+            attendance.course?.title,
+            attendance.faculty?.name,
+            attendance.faculty?.employeeId,
+            attendance.status,
+            attendance.remarks,
+          ]
+            .filter(Boolean)
+            .some((value) =>
+              String(value)
+                .toLowerCase()
+                .includes(query),
+            );
+        },
+      );
+    }, [attendances, search]);
 
-      return searchable.includes(query);
-    });
-  }, [attendances, search]);
-
-  const stats = useMemo(() => {
-    return {
+  const stats = useMemo(
+    () => ({
       total: attendances.length,
       present: attendances.filter(
-        (item) => item.status === "PRESENT",
+        (item) =>
+          item.status === "PRESENT",
       ).length,
       absent: attendances.filter(
-        (item) => item.status === "ABSENT",
+        (item) =>
+          item.status === "ABSENT",
       ).length,
       late: attendances.filter(
-        (item) => item.status === "LATE",
+        (item) =>
+          item.status === "LATE",
       ).length,
-    };
-  }, [attendances]);
+    }),
+    [attendances],
+  );
 
-  const openEdit = (attendance: Attendance) => {
-    setEditId(attendance.id);
+  const openEdit = (
+    attendance: Attendance,
+  ) => {
+    setEditingId(attendance.id);
     setEditStatus(attendance.status);
-    setEditRemarks(attendance.remarks ?? "");
+    setEditRemarks(
+      attendance.remarks ?? "",
+    );
+  };
+
+  const closeEdit = () => {
+    if (updateMutation.isPending) return;
+
+    setEditingId(null);
+    setEditRemarks("");
   };
 
   const handleUpdate = async () => {
-    if (!editId) return;
+    if (!editingId) return;
 
     await updateMutation.mutateAsync({
-      id: editId,
+      id: editingId,
       status: editStatus,
       remarks: editRemarks.trim(),
     });
 
-    setEditId(null);
-    setEditRemarks("");
+    closeEdit();
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
 
-    await deleteMutation.mutateAsync(deleteId);
-
-    setDeleteId(null);
+    await deleteMutation.mutateAsync(
+      deleteId,
+    );
 
     if (selectedId === deleteId) {
       setSelectedId(null);
     }
+
+    setDeleteId(null);
   };
+
+  const animationProps = reduceMotion
+    ? {}
+    : {
+        variants: itemVariants,
+      };
 
   return (
     <main className="min-h-full space-y-6">
-      {/* HERO */}
+      {/* Header */}
       <motion.section
-        variants={itemVariants}
-        initial="hidden"
-        animate="show"
-        className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] p-6 shadow-2xl backdrop-blur-xl md:p-8"
+        initial={
+          reduceMotion
+            ? undefined
+            : { opacity: 0, y: -15 }
+        }
+        animate={
+          reduceMotion
+            ? undefined
+            : { opacity: 1, y: 0 }
+        }
+        className="relative overflow-hidden rounded-3xl border border-cyan-400/10 bg-gradient-to-br from-cyan-400/[0.08] via-transparent to-violet-500/[0.08] p-6 md:p-8"
       >
-        <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-cyan-500/10 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
+        <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
 
-        <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+        <div className="absolute -bottom-32 left-1/3 h-72 w-72 rounded-full bg-violet-500/10 blur-3xl" />
+
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">
-              <UserCheck className="h-3.5 w-3.5" />
-              Academic Control
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/5 px-3 py-1.5 text-xs font-medium uppercase tracking-[0.18em] text-cyan-300">
+              <Activity size={14} />
+              Academic tracking
             </div>
 
-            <h1 className="text-3xl font-black tracking-tight text-white md:text-4xl">
+            <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
               Attendance{" "}
               <span className="bg-gradient-to-r from-cyan-300 via-blue-400 to-violet-400 bg-clip-text text-transparent">
                 Command Center
               </span>
             </h1>
 
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
-              Monitor attendance records, review student presence,
-              and keep every academic session synchronized.
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/50 md:text-base">
+              Monitor attendance records,
+              identify irregularities and
+              keep academic participation
+              under control.
             </p>
           </div>
 
@@ -267,59 +381,72 @@ export default function AdminAttendancePage() {
             type="button"
             onClick={() => refetch()}
             disabled={isFetching}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-semibold text-white transition hover:border-cyan-400/30 hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition hover:border-cyan-400/30 hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw
-              className={`h-4 w-4 ${
-                isFetching ? "animate-spin" : ""
-              }`}
+              size={16}
+              className={
+                isFetching
+                  ? "animate-spin"
+                  : ""
+              }
             />
             Refresh
           </button>
         </div>
       </motion.section>
 
-      {/* STATS */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          icon={CalendarDays}
-          label="Total Records"
-          value={stats.total}
-          description="Loaded attendance records"
-        />
-
-        <StatCard
-          icon={CheckCircle2}
-          label="Present"
-          value={stats.present}
-          description="Students marked present"
-        />
-
-        <StatCard
-          icon={XCircle}
-          label="Absent"
-          value={stats.absent}
-          description="Students marked absent"
-        />
-
-        <StatCard
-          icon={Clock3}
-          label="Late"
-          value={stats.late}
-          description="Late arrivals"
-        />
-      </section>
-
-      {/* TOOLBAR */}
+      {/* Stats */}
       <motion.section
-        variants={itemVariants}
         initial="hidden"
         animate="show"
-        className="rounded-3xl border border-white/10 bg-white/[0.025] p-4 backdrop-blur-xl"
+        variants={{
+          hidden: {},
+          show: {
+            transition: {
+              staggerChildren: 0.07,
+            },
+          },
+        }}
+        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
       >
+        <StatCard
+          label="Records loaded"
+          value={stats.total}
+          icon={<CalendarDays size={20} />}
+          accent="bg-cyan-400/20"
+        />
+
+        <StatCard
+          label="Present"
+          value={stats.present}
+          icon={<CheckCircle2 size={20} />}
+          accent="bg-emerald-400/20"
+        />
+
+        <StatCard
+          label="Absent"
+          value={stats.absent}
+          icon={<XCircle size={20} />}
+          accent="bg-rose-400/20"
+        />
+
+        <StatCard
+          label="Late"
+          value={stats.late}
+          icon={<Clock3 size={20} />}
+          accent="bg-amber-400/20"
+        />
+      </motion.section>
+
+      {/* Controls */}
+      <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 backdrop-blur-xl">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="relative w-full xl:max-w-md">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <Search
+              size={17}
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30"
+            />
 
             <input
               value={search}
@@ -327,112 +454,107 @@ export default function AdminAttendancePage() {
                 setSearch(event.target.value)
               }
               placeholder="Search student, course, faculty..."
-              className="h-12 w-full rounded-2xl border border-white/10 bg-black/20 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400/40 focus:ring-2 focus:ring-cyan-400/10"
+              className="h-11 w-full rounded-xl border border-white/10 bg-black/20 pl-11 pr-4 text-sm text-white outline-none placeholder:text-white/25 focus:border-cyan-400/40 focus:ring-2 focus:ring-cyan-400/10"
             />
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <FilterButton
-              active={!statusFilter}
-              onClick={() =>
-                setStatusFilter(undefined)
-              }
-            >
-              All
-            </FilterButton>
-
-            <FilterButton
-              active={statusFilter === "PRESENT"}
-              onClick={() =>
-                setStatusFilter("PRESENT")
-              }
-            >
-              Present
-            </FilterButton>
-
-            <FilterButton
-              active={statusFilter === "ABSENT"}
-              onClick={() =>
-                setStatusFilter("ABSENT")
-              }
-            >
-              Absent
-            </FilterButton>
-
-            <FilterButton
-              active={statusFilter === "LATE"}
-              onClick={() =>
-                setStatusFilter("LATE")
-              }
-            >
-              Late
-            </FilterButton>
+            {STATUS_OPTIONS.map(
+              (option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() =>
+                    setStatus(option)
+                  }
+                  className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                    status === option
+                      ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
+                      : "border-white/10 bg-white/[0.03] text-white/45 hover:bg-white/[0.06] hover:text-white"
+                  }`}
+                >
+                  {option}
+                </button>
+              ),
+            )}
           </div>
         </div>
-      </motion.section>
+      </section>
 
-      {/* CONTENT */}
+      {/* Content */}
       <motion.section
-        variants={itemVariants}
         initial="hidden"
         animate="show"
-        className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.025] backdrop-blur-xl"
+        className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] backdrop-blur-xl"
       >
         {isLoading ? (
-          <AttendanceSkeleton />
+          <div className="p-5">
+            <AttendanceSkeleton />
+          </div>
         ) : isError ? (
-          <StateBlock
-            icon={AlertCircle}
-            title="Attendance data unavailable"
-            description="We could not load attendance records from the backend."
-            action={
-              <button
-                type="button"
-                onClick={() => refetch()}
-                className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-300"
-              >
-                Try again
-              </button>
-            }
-          />
-        ) : filteredAttendances.length === 0 ? (
-          <StateBlock
-            icon={CalendarDays}
-            title="No attendance records"
-            description={
-              search
-                ? "No attendance record matches your search."
-                : "There are no attendance records available yet."
-            }
-          />
+          <div className="flex min-h-72 flex-col items-center justify-center p-8 text-center">
+            <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-rose-300">
+              <AlertCircle size={26} />
+            </div>
+
+            <h3 className="mt-4 text-lg font-semibold text-white">
+              Unable to load attendance
+            </h3>
+
+            <p className="mt-2 max-w-md text-sm text-white/40">
+              {error instanceof Error
+                ? error.message
+                : "Something went wrong while loading attendance records."}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="mt-5 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
+            >
+              Try again
+            </button>
+          </div>
+        ) : filteredAttendances.length ===
+          0 ? (
+          <div className="flex min-h-72 flex-col items-center justify-center p-8 text-center">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-cyan-300">
+              <CalendarDays size={26} />
+            </div>
+
+            <h3 className="mt-4 text-lg font-semibold text-white">
+              No attendance records
+            </h3>
+
+            <p className="mt-2 max-w-md text-sm text-white/40">
+              No records match the current
+              search or status filter.
+            </p>
+          </div>
         ) : (
           <>
-            {/* DESKTOP */}
-            <div className="hidden overflow-x-auto lg:block">
-              <table className="w-full">
+            {/* Desktop */}
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[900px]">
                 <thead>
-                  <tr className="border-b border-white/10 bg-white/[0.025]">
-                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                  <tr className="border-b border-white/10 bg-white/[0.02] text-left">
+                    <th className="px-5 py-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
                       Student
                     </th>
 
-                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <th className="px-5 py-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
                       Course
                     </th>
 
-                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Faculty
-                    </th>
-
-                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <th className="px-5 py-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
                       Date
                     </th>
 
-                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <th className="px-5 py-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
                       Status
                     </th>
 
-                    <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <th className="px-5 py-4 text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
                       Actions
                     </th>
                   </tr>
@@ -441,42 +563,202 @@ export default function AdminAttendancePage() {
                 <tbody>
                   {filteredAttendances.map(
                     (attendance) => (
-                      <AttendanceRow
+                      <motion.tr
                         key={attendance.id}
-                        attendance={attendance}
-                        onView={() =>
-                          setSelectedId(attendance.id)
-                        }
-                        onEdit={() =>
-                          openEdit(attendance)
-                        }
-                        onDelete={() =>
-                          setDeleteId(attendance.id)
-                        }
-                      />
+                        {...animationProps}
+                        className="border-b border-white/5 transition hover:bg-white/[0.035]"
+                      >
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/10 bg-cyan-400/5 text-cyan-300">
+                              <UserCheck size={18} />
+                            </div>
+
+                            <div>
+                              <p className="text-sm font-medium text-white">
+                                {getStudentName(
+                                  attendance,
+                                )}
+                              </p>
+
+                              <p className="mt-0.5 text-xs text-white/30">
+                                {attendance.student
+                                  ?.studentId ||
+                                  attendance.studentId}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p className="text-sm text-white/80">
+                            {getCourseName(
+                              attendance,
+                            )}
+                          </p>
+
+                          <p className="mt-0.5 text-xs text-white/30">
+                            {attendance.faculty
+                              ?.name ||
+                              attendance.facultyId}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4 text-sm text-white/55">
+                          {formatDate(
+                            attendance.date,
+                          )}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusClasses(
+                              attendance.status,
+                            )}`}
+                          >
+                            <StatusIcon
+                              status={
+                                attendance.status
+                              }
+                            />
+
+                            {attendance.status}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedId(
+                                  attendance.id,
+                                )
+                              }
+                              className="rounded-lg border border-white/10 bg-white/5 p-2 text-white/50 transition hover:border-cyan-400/20 hover:bg-cyan-400/10 hover:text-cyan-300"
+                              title="View"
+                            >
+                              <Eye size={16} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openEdit(
+                                  attendance,
+                                )
+                              }
+                              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60 transition hover:bg-white/10 hover:text-white"
+                            >
+                              Edit
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeleteId(
+                                  attendance.id,
+                                )
+                              }
+                              className="rounded-lg border border-rose-400/10 bg-rose-400/5 p-2 text-rose-300 transition hover:bg-rose-400/10"
+                              title="Delete"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
                     ),
                   )}
                 </tbody>
               </table>
             </div>
 
-            {/* MOBILE */}
-            <div className="grid gap-3 p-4 lg:hidden">
+            {/* Mobile */}
+            <div className="space-y-3 p-4 md:hidden">
               {filteredAttendances.map(
                 (attendance) => (
-                  <AttendanceCard
+                  <motion.div
                     key={attendance.id}
-                    attendance={attendance}
-                    onView={() =>
-                      setSelectedId(attendance.id)
-                    }
-                    onEdit={() =>
-                      openEdit(attendance)
-                    }
-                    onDelete={() =>
-                      setDeleteId(attendance.id)
-                    }
-                  />
+                    {...animationProps}
+                    className="rounded-2xl border border-white/10 bg-white/[0.025] p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-white">
+                          {getStudentName(
+                            attendance,
+                          )}
+                        </p>
+
+                        <p className="mt-1 text-xs text-white/35">
+                          {getCourseName(
+                            attendance,
+                          )}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium ${getStatusClasses(
+                          attendance.status,
+                        )}`}
+                      >
+                        <StatusIcon
+                          status={
+                            attendance.status
+                          }
+                        />
+
+                        {attendance.status}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between border-t border-white/5 pt-3">
+                      <span className="text-xs text-white/35">
+                        {formatDate(
+                          attendance.date,
+                        )}
+                      </span>
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedId(
+                              attendance.id,
+                            )
+                          }
+                          className="rounded-lg border border-white/10 p-2 text-white/50"
+                        >
+                          <Eye size={15} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openEdit(
+                              attendance,
+                            )
+                          }
+                          className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60"
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeleteId(
+                              attendance.id,
+                            )
+                          }
+                          className="rounded-lg border border-rose-400/10 p-2 text-rose-300"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
                 ),
               )}
             </div>
@@ -484,128 +766,226 @@ export default function AdminAttendancePage() {
         )}
       </motion.section>
 
-      {/* VIEW MODAL */}
+      {/* View modal */}
       {selectedId && (
-        <Modal
-          onClose={() => setSelectedId(null)}
-          title="Attendance Details"
-        >
-          {selectedAttendance.isLoading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="h-7 w-7 animate-spin text-cyan-300" />
-            </div>
-          ) : selectedAttendance.data ? (
-            <AttendanceDetails
-              attendance={selectedAttendance.data}
-            />
-          ) : (
-            <p className="py-8 text-center text-sm text-slate-500">
-              Attendance details could not be loaded.
-            </p>
-          )}
-        </Modal>
-      )}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md">
+          <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#080d18] p-6 shadow-2xl shadow-cyan-950/30">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-cyan-300/60">
+                  Attendance record
+                </p>
 
-      {/* EDIT MODAL */}
-      {editId && (
-        <Modal
-          onClose={() => setEditId(null)}
-          title="Update Attendance"
-        >
-          <div className="space-y-5">
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-300">
-                Status
-              </label>
-
-              <div className="grid grid-cols-3 gap-2">
-                {(
-                  [
-                    "PRESENT",
-                    "ABSENT",
-                    "LATE",
-                  ] as AttendanceStatus[]
-                ).map((status) => (
-                  <button
-                    key={status}
-                    type="button"
-                    onClick={() =>
-                      setEditStatus(status)
-                    }
-                    className={`rounded-xl border px-3 py-3 text-xs font-bold transition ${
-                      editStatus === status
-                        ? statusConfig[status]
-                            .className
-                        : "border-white/10 bg-white/[0.03] text-slate-500 hover:text-white"
-                    }`}
-                  >
-                    {status}
-                  </button>
-                ))}
+                <h2 className="mt-2 text-xl font-semibold text-white">
+                  Attendance Details
+                </h2>
               </div>
-            </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-300">
-                Remarks
-              </label>
-
-              <textarea
-                value={editRemarks}
-                onChange={(event) =>
-                  setEditRemarks(event.target.value)
-                }
-                rows={4}
-                placeholder="Add attendance remarks..."
-                className="w-full resize-none rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-400/40"
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={handleUpdate}
-              disabled={updateMutation.isPending}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-500/10 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {updateMutation.isPending && (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              )}
-
-              Save Changes
-            </button>
-          </div>
-        </Modal>
-      )}
-
-      {/* DELETE MODAL */}
-      {deleteId && (
-        <Modal
-          onClose={() => setDeleteId(null)}
-          title="Delete Attendance"
-        >
-          <div className="space-y-5">
-            <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4">
-              <div className="flex gap-3">
-                <Trash2 className="mt-0.5 h-5 w-5 shrink-0 text-rose-300" />
-
-                <div>
-                  <p className="font-semibold text-rose-200">
-                    Remove this attendance record?
-                  </p>
-
-                  <p className="mt-1 text-sm leading-6 text-rose-200/60">
-                    This action will permanently delete the
-                    selected attendance record.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
               <button
                 type="button"
-                onClick={() => setDeleteId(null)}
-                className="flex-1 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-slate-300"
+                onClick={() =>
+                  setSelectedId(null)
+                }
+                className="rounded-xl border border-white/10 p-2 text-white/50 hover:bg-white/5 hover:text-white"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {selectedAttendance.isLoading ? (
+              <div className="mt-6 space-y-3">
+                <div className="h-14 animate-pulse rounded-xl bg-white/5" />
+                <div className="h-14 animate-pulse rounded-xl bg-white/5" />
+                <div className="h-14 animate-pulse rounded-xl bg-white/5" />
+              </div>
+            ) : selectedAttendance.data ? (
+              <div className="mt-6 space-y-3">
+                <DetailRow
+                  label="Student"
+                  value={getStudentName(
+                    selectedAttendance.data,
+                  )}
+                />
+
+                <DetailRow
+                  label="Course"
+                  value={getCourseName(
+                    selectedAttendance.data,
+                  )}
+                />
+
+                <DetailRow
+                  label="Faculty"
+                  value={
+                    selectedAttendance.data
+                      .faculty?.name ||
+                    selectedAttendance.data
+                      .facultyId
+                  }
+                />
+
+                <DetailRow
+                  label="Date"
+                  value={formatDate(
+                    selectedAttendance.data
+                      .date,
+                  )}
+                />
+
+                <DetailRow
+                  label="Status"
+                  value={
+                    selectedAttendance.data
+                      .status
+                  }
+                />
+
+                <DetailRow
+                  label="Remarks"
+                  value={
+                    selectedAttendance.data
+                      .remarks || "No remarks"
+                  }
+                />
+              </div>
+            ) : (
+              <p className="mt-6 text-sm text-rose-300">
+                Failed to load attendance
+                details.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit modal */}
+      {editingId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#080d18] p-6 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-cyan-300/60">
+                  Modify record
+                </p>
+
+                <h2 className="mt-2 text-xl font-semibold text-white">
+                  Update Attendance
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeEdit}
+                className="rounded-xl border border-white/10 p-2 text-white/50 hover:bg-white/5"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-5">
+              <div>
+                <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-white/40">
+                  Status
+                </label>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      "PRESENT",
+                      "ABSENT",
+                      "LATE",
+                    ] as AttendanceStatus[]
+                  ).map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() =>
+                        setEditStatus(item)
+                      }
+                      className={`rounded-xl border px-3 py-3 text-xs font-medium transition ${
+                        editStatus === item
+                          ? getStatusClasses(
+                              item,
+                            )
+                          : "border-white/10 bg-white/[0.03] text-white/40"
+                      }`}
+                    >
+                      {item}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-white/40">
+                  Remarks
+                </label>
+
+                <textarea
+                  value={editRemarks}
+                  onChange={(event) =>
+                    setEditRemarks(
+                      event.target.value,
+                    )
+                  }
+                  rows={4}
+                  placeholder="Add attendance remarks..."
+                  className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-cyan-400/40"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleUpdate}
+                disabled={
+                  updateMutation.isPending
+                }
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-4 py-3 text-sm font-semibold text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {updateMutation.isPending ? (
+                  <>
+                    <Loader2
+                      size={17}
+                      className="animate-spin"
+                    />
+                    Saving...
+                  </>
+                ) : (
+                  "Save changes"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete modal */}
+      {deleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md">
+          <div className="w-full max-w-sm rounded-3xl border border-rose-400/10 bg-[#080d18] p-6 shadow-2xl">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-400/10 text-rose-300">
+              <Trash2 size={22} />
+            </div>
+
+            <h2 className="mt-5 text-xl font-semibold text-white">
+              Delete attendance?
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-white/40">
+              This attendance record will be
+              permanently removed.
+            </p>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() =>
+                  setDeleteId(null)
+                }
+                disabled={
+                  deleteMutation.isPending
+                }
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/60 hover:bg-white/10"
               >
                 Cancel
               </button>
@@ -613,330 +993,31 @@ export default function AdminAttendancePage() {
               <button
                 type="button"
                 onClick={handleDelete}
-                disabled={deleteMutation.isPending}
-                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-rose-500/90 px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
+                disabled={
+                  deleteMutation.isPending
+                }
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-rose-500/90 px-4 py-3 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-50"
               >
-                {deleteMutation.isPending && (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                {deleteMutation.isPending ? (
+                  <Loader2
+                    size={16}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Trash2 size={16} />
                 )}
 
                 Delete
               </button>
             </div>
           </div>
-        </Modal>
+        </div>
       )}
     </main>
   );
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  description,
-}: {
-  icon: typeof CheckCircle2;
-  label: string;
-  value: number;
-  description: string;
-}) {
-  return (
-    <motion.div
-      variants={itemVariants}
-      initial="hidden"
-      animate="show"
-      className="rounded-3xl border border-white/10 bg-white/[0.025] p-5 backdrop-blur-xl"
-    >
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            {label}
-          </p>
-
-          <p className="mt-3 text-3xl font-black text-white">
-            {value}
-          </p>
-
-          <p className="mt-1 text-xs text-slate-600">
-            {description}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-cyan-400/10 bg-cyan-400/10 p-3">
-          <Icon className="h-5 w-5 text-cyan-300" />
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function FilterButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-        active
-          ? "border border-cyan-400/20 bg-cyan-400/10 text-cyan-300"
-          : "border border-white/10 bg-white/[0.03] text-slate-500 hover:text-white"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function AttendanceRow({
-  attendance,
-  onView,
-  onEdit,
-  onDelete,
-}: {
-  attendance: Attendance;
-  onView: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const config = statusConfig[attendance.status];
-  const Icon = config.icon;
-
-  return (
-    <tr className="border-b border-white/[0.06] transition hover:bg-white/[0.025]">
-      <td className="px-6 py-5">
-        <p className="font-semibold text-white">
-          {getStudentName(attendance)}
-        </p>
-
-        <p className="mt-1 text-xs text-slate-600">
-          {attendance.student?.studentId ||
-            attendance.studentId}
-        </p>
-      </td>
-
-      <td className="px-6 py-5">
-        <p className="font-medium text-slate-300">
-          {getCourseName(attendance)}
-        </p>
-      </td>
-
-      <td className="px-6 py-5 text-sm text-slate-400">
-        {getFacultyName(attendance)}
-      </td>
-
-      <td className="px-6 py-5 text-sm text-slate-400">
-        {formatDate(attendance.date)}
-      </td>
-
-      <td className="px-6 py-5">
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold ${config.className}`}
-        >
-          <Icon className="h-3.5 w-3.5" />
-          {config.label}
-        </span>
-      </td>
-
-      <td className="px-6 py-5">
-        <div className="flex justify-end gap-2">
-          <ActionButton
-            icon={Eye}
-            label="View"
-            onClick={onView}
-          />
-
-          <ActionButton
-            icon={Clock3}
-            label="Edit"
-            onClick={onEdit}
-          />
-
-          <ActionButton
-            icon={Trash2}
-            label="Delete"
-            danger
-            onClick={onDelete}
-          />
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-function AttendanceCard({
-  attendance,
-  onView,
-  onEdit,
-  onDelete,
-}: {
-  attendance: Attendance;
-  onView: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const config = statusConfig[attendance.status];
-  const Icon = config.icon;
-
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="font-bold text-white">
-            {getStudentName(attendance)}
-          </p>
-
-          <p className="mt-1 text-xs text-slate-600">
-            {attendance.student?.studentId ||
-              attendance.studentId}
-          </p>
-        </div>
-
-        <span
-          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold ${config.className}`}
-        >
-          <Icon className="h-3 w-3" />
-          {config.label}
-        </span>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-        <div>
-          <p className="text-slate-600">Course</p>
-          <p className="mt-1 text-slate-300">
-            {getCourseName(attendance)}
-          </p>
-        </div>
-
-        <div>
-          <p className="text-slate-600">Date</p>
-          <p className="mt-1 text-slate-300">
-            {formatDate(attendance.date)}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={onView}
-          className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] py-2 text-xs font-bold text-slate-300"
-        >
-          View
-        </button>
-
-        <button
-          type="button"
-          onClick={onEdit}
-          className="flex-1 rounded-xl border border-cyan-400/10 bg-cyan-400/10 py-2 text-xs font-bold text-cyan-300"
-        >
-          Edit
-        </button>
-
-        <button
-          type="button"
-          onClick={onDelete}
-          className="rounded-xl border border-rose-400/10 bg-rose-400/10 px-3 py-2 text-rose-300"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ActionButton({
-  icon: Icon,
-  label,
-  onClick,
-  danger = false,
-}: {
-  icon: typeof Eye;
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      title={label}
-      onClick={onClick}
-      className={`rounded-xl border p-2 transition ${
-        danger
-          ? "border-rose-400/10 bg-rose-400/5 text-rose-300 hover:bg-rose-400/10"
-          : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-cyan-400/20 hover:text-cyan-300"
-      }`}
-    >
-      <Icon className="h-4 w-4" />
-    </button>
-  );
-}
-
-function AttendanceDetails({
-  attendance,
-}: {
-  attendance: Attendance;
-}) {
-  const config = statusConfig[attendance.status];
-  const Icon = config.icon;
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-        <div>
-          <p className="text-xs uppercase tracking-wider text-slate-600">
-            Attendance ID
-          </p>
-
-          <p className="mt-1 break-all text-sm font-semibold text-white">
-            {attendance.id}
-          </p>
-        </div>
-
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold ${config.className}`}
-        >
-          <Icon className="h-3.5 w-3.5" />
-          {config.label}
-        </span>
-      </div>
-
-      <DetailItem
-        label="Student"
-        value={getStudentName(attendance)}
-      />
-
-      <DetailItem
-        label="Course"
-        value={getCourseName(attendance)}
-      />
-
-      <DetailItem
-        label="Faculty"
-        value={getFacultyName(attendance)}
-      />
-
-      <DetailItem
-        label="Date"
-        value={formatDate(attendance.date)}
-      />
-
-      <DetailItem
-        label="Remarks"
-        value={attendance.remarks || "No remarks"}
-      />
-    </div>
-  );
-}
-
-function DetailItem({
+function DetailRow({
   label,
   value,
 }: {
@@ -944,93 +1025,14 @@ function DetailItem({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
-      <p className="text-xs uppercase tracking-wider text-slate-600">
+    <div className="rounded-xl border border-white/5 bg-white/[0.025] p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/30">
         {label}
       </p>
 
-      <p className="mt-1 text-sm leading-6 text-slate-300">
+      <p className="mt-1.5 break-words text-sm text-white/80">
         {value}
       </p>
-    </div>
-  );
-}
-
-function Modal({
-  title,
-  children,
-  onClose,
-}: {
-  title: string;
-  children: React.ReactNode;
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-md">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-white/10 bg-[#07101f]/95 p-6 shadow-2xl"
-      >
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-white">
-            {title}
-          </h2>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border border-white/10 bg-white/[0.04] p-2 text-slate-400 transition hover:text-white"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {children}
-      </motion.div>
-    </div>
-  );
-}
-
-function StateBlock({
-  icon: Icon,
-  title,
-  description,
-  action,
-}: {
-  icon: typeof AlertCircle;
-  title: string;
-  description: string;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center">
-      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-        <Icon className="h-7 w-7 text-cyan-300" />
-      </div>
-
-      <h3 className="mt-5 text-lg font-bold text-white">
-        {title}
-      </h3>
-
-      <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-        {description}
-      </p>
-
-      {action && <div className="mt-5">{action}</div>}
-    </div>
-  );
-}
-
-function AttendanceSkeleton() {
-  return (
-    <div className="space-y-4 p-6">
-      {Array.from({ length: 7 }).map((_, index) => (
-        <div
-          key={index}
-          className="h-16 animate-pulse rounded-2xl bg-white/[0.045]"
-        />
-      ))}
     </div>
   );
 }

@@ -15,15 +15,12 @@ export type AttendanceStatus =
 
 export interface Attendance {
   id: string;
-
   studentId: string;
   courseId: string;
   facultyId: string;
-
   date: string;
   status: AttendanceStatus;
   remarks?: string | null;
-
   createdAt?: string;
   updatedAt?: string;
 
@@ -49,7 +46,7 @@ export interface Attendance {
   } | null;
 }
 
-interface AttendanceListResponse {
+interface AttendancesResponse {
   success: boolean;
   message?: string;
   data?: {
@@ -88,23 +85,20 @@ async function fetchAttendances(
   status?: AttendanceStatus,
 ): Promise<Attendance[]> {
   const response =
-    await api.get<AttendanceListResponse>(
-      "/attendances",
-      {
-        params: {
-          page: 1,
-          limit: 10,
-          ...(status ? { status } : {}),
-        },
+    await api.get<AttendancesResponse>("/attendances", {
+      params: {
+        page: 1,
+        limit: 10,
+        ...(status ? { status } : {}),
       },
-    );
+    });
 
   return response.data.data?.data ?? [];
 }
 
 async function fetchMyAttendance(): Promise<Attendance[]> {
   const response =
-    await api.get<AttendanceListResponse>(
+    await api.get<AttendancesResponse>(
       "/attendances/my",
       {
         params: {
