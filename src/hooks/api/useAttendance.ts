@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -12,6 +13,8 @@ export type AttendanceStatus =
   | "PRESENT"
   | "ABSENT"
   | "LATE";
+
+export type UserRole = "ADMIN" | "FACULTY" | "STUDENT";
 
 export interface Attendance {
   id: string;
@@ -82,47 +85,51 @@ export interface UpdateAttendancePayload {
 }
 
 async function fetchAttendances(
+  role: UserRole,
   status?: AttendanceStatus,
 ): Promise<Attendance[]> {
-  const response =
-    await api.get<AttendancesResponse>("/attendances", {
+  const endpoint =
+    role === "FACULTY"
+      ? "/attendances/my-courses"
+      : role === "STUDENT"
+        ? "/attendances/my"
+        : "/attendances";
+
+  const response = await api.get<AttendancesResponse>(
+    endpoint,
+    {
       params: {
         page: 1,
         limit: 10,
         ...(status ? { status } : {}),
       },
-    });
+    },
+  );
 
   return response.data.data?.data ?? [];
 }
 
 async function fetchMyAttendance(): Promise<Attendance[]> {
-  const response =
-    await api.get<AttendancesResponse>(
-      "/attendances/my",
-      {
-        params: {
-          page: 1,
-          limit: 10,
-        },
+  const response = await api.get<AttendancesResponse>(
+    "/attendances/my",
+    {
+      params: {
+        page: 1,
+        limit: 10,
       },
-    );
+    },
+  );
 
   return response.data.data?.data ?? [];
 }
 
-async function fetchAttendance(
-  id: string,
-): Promise<Attendance> {
-  const response =
-    await api.get<AttendanceResponse>(
-      `/attendances/${id}`,
-    );
+async function fetchAttendance(id: string): Promise<Attendance> {
+  const response = await api.get<AttendanceResponse>(
+    `/attendances/${id}`,
+  );
 
   if (!response.data.data) {
-    throw new Error(
-      "Attendance data was not returned.",
-    );
+    throw new Error("Attendance data was not returned.");
   }
 
   return response.data.data;
@@ -131,11 +138,10 @@ async function fetchAttendance(
 async function createAttendance(
   payload: CreateAttendancePayload,
 ): Promise<AttendanceResponse> {
-  const response =
-    await api.post<AttendanceResponse>(
-      "/attendances",
-      payload,
-    );
+  const response = await api.post<AttendanceResponse>(
+    "/attendances",
+    payload,
+  );
 
   return response.data;
 }
@@ -143,37 +149,36 @@ async function createAttendance(
 async function updateAttendance(
   payload: UpdateAttendancePayload,
 ): Promise<AttendanceResponse> {
-  const response =
-    await api.patch<AttendanceResponse>(
-      `/attendances/${payload.id}`,
-      {
-        status: payload.status,
-        remarks: payload.remarks,
-      },
-    );
+  const response = await api.patch<AttendanceResponse>(
+    `/attendances/${payload.id}`,
+    {
+      status: payload.status,
+      remarks: payload.remarks,
+    },
+  );
 
   return response.data;
 }
 
-async function deleteAttendance(
-  id: string,
-): Promise<void> {
+async function deleteAttendance(id: string): Promise<void> {
   await api.delete(`/attendances/${id}`);
 }
 
 export function useAttendances(
+  role: UserRole = "ADMIN",
   status?: AttendanceStatus,
 ) {
   return useQuery({
     queryKey: [
       "attendances",
       {
+        role,
         page: 1,
         limit: 10,
         status: status ?? "ALL",
       },
     ],
-    queryFn: () => fetchAttendances(status),
+    queryFn: () => fetchAttendances(role, status),
   });
 }
 
@@ -190,13 +195,10 @@ export function useMyAttendance() {
   });
 }
 
-export function useAttendance(
-  id: string | null,
-) {
+export function useAttendance(id: string | null) {
   return useQuery({
     queryKey: ["attendance", id],
-    queryFn: () =>
-      fetchAttendance(id as string),
+    queryFn: () => fetchAttendance(id as string),
     enabled: Boolean(id),
   });
 }

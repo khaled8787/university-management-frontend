@@ -482,7 +482,7 @@ export default function StudentCoursesPage() {
     data: enrollments = [],
     isLoading: enrollmentsLoading,
     isError: enrollmentsError,
-  } = useEnrollments();
+  } = useEnrollments("STUDENT");
 
   const [search, setSearch] = useState("");
   const [activeOnly, setActiveOnly] = useState(true);

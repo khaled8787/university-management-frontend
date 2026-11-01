@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo } from "react";
@@ -42,17 +43,11 @@ const containerVariants: Variants = {
 };
 
 const itemVariants: Variants = {
-  hidden: {
-    opacity: 0,
-    y: 18,
-  },
+  hidden: { opacity: 0, y: 18 },
   show: {
     opacity: 1,
     y: 0,
-    transition: {
-      duration: 0.45,
-      ease: "easeOut",
-    },
+    transition: { duration: 0.45, ease: "easeOut" },
   },
 };
 
@@ -60,7 +55,6 @@ function DashboardSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
       <div className="h-56 rounded-[2rem] border border-white/10 bg-white/[0.035]" />
-
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
           <div
@@ -69,7 +63,6 @@ function DashboardSkeleton() {
           />
         ))}
       </div>
-
       <div className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
         <div className="h-96 rounded-3xl border border-white/10 bg-white/[0.035]" />
         <div className="h-96 rounded-3xl border border-white/10 bg-white/[0.035]" />
@@ -95,20 +88,16 @@ function StatCard({
       className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] p-5 backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-cyan-400/20 hover:bg-white/[0.05]"
     >
       <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-cyan-400/[0.07] blur-3xl transition group-hover:bg-cyan-400/[0.13]" />
-
       <div className="relative flex items-start justify-between">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600">
             {label}
           </p>
-
           <p className="mt-3 text-2xl font-semibold tracking-tight text-white">
             {value}
           </p>
-
           <p className="mt-1 text-xs text-slate-500">{detail}</p>
         </div>
-
         <div className="rounded-2xl border border-cyan-400/15 bg-cyan-400/[0.07] p-3 text-cyan-300">
           <Icon size={19} />
         </div>
@@ -137,12 +126,12 @@ function QuickAction({
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-400/10 bg-cyan-400/[0.06] text-cyan-300 transition group-hover:scale-105">
         <Icon size={18} />
       </div>
-
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-white">{title}</p>
-        <p className="mt-1 truncate text-xs text-slate-600">{description}</p>
+        <p className="mt-1 truncate text-xs text-slate-600">
+          {description}
+        </p>
       </div>
-
       <ChevronRight
         size={16}
         className="text-slate-700 transition group-hover:translate-x-1 group-hover:text-cyan-300"
@@ -153,9 +142,11 @@ function QuickAction({
 
 export default function FacultyDashboardPage() {
   const coursesQuery = useCourses();
-  const studentsQuery = useStudents();
-  const attendanceQuery = useAttendances();
-  const resultsQuery = useResults();
+
+  // Faculty-specific endpoints
+  const studentsQuery = useStudents("FACULTY");
+  const attendanceQuery = useAttendances("FACULTY");
+  const resultsQuery = useResults("FACULTY");
 
   const courses = coursesQuery.data ?? [];
   const students = studentsQuery.data ?? [];
@@ -174,14 +165,13 @@ export default function FacultyDashboardPage() {
     attendanceQuery.isError ||
     resultsQuery.isError;
 
-  const errorMessage =
-    getApiErrorMessage(
-      coursesQuery.error ??
-        studentsQuery.error ??
-        attendanceQuery.error ??
-        resultsQuery.error,
-      "Unable to load faculty dashboard data.",
-    );
+  const errorMessage = getApiErrorMessage(
+    coursesQuery.error ??
+      studentsQuery.error ??
+      attendanceQuery.error ??
+      resultsQuery.error,
+    "Unable to load faculty dashboard data.",
+  );
 
   const activeCourses = useMemo(
     () => courses.filter((course) => course.isActive),
@@ -205,13 +195,11 @@ export default function FacultyDashboardPage() {
 
   const attendanceRate = useMemo(() => {
     if (!attendance.length) return 0;
-
     return ((presentCount + lateCount * 0.5) / attendance.length) * 100;
   }, [attendance.length, presentCount, lateCount]);
 
   const averageMarks = useMemo(() => {
     if (!results.length) return 0;
-
     return (
       results.reduce((sum, result) => sum + Number(result.marks || 0), 0) /
       results.length
@@ -220,7 +208,6 @@ export default function FacultyDashboardPage() {
 
   const averageGradePoint = useMemo(() => {
     if (!results.length) return 0;
-
     return (
       results.reduce(
         (sum, result) => sum + Number(result.gradePoint || 0),
@@ -231,25 +218,18 @@ export default function FacultyDashboardPage() {
 
   const chartData = useMemo(() => {
     const buckets = [
-      { label: "Week 1", value: 0 },
-      { label: "Week 2", value: 0 },
-      { label: "Week 3", value: 0 },
-      { label: "Week 4", value: 0 },
+      { label: "Week 1", value: 0, count: 0 },
+      { label: "Week 2", value: 0, count: 0 },
+      { label: "Week 3", value: 0, count: 0 },
+      { label: "Week 4", value: 0, count: 0 },
     ];
-
-    if (!attendance.length) {
-      return buckets.map((item) => ({
-        ...item,
-        value: 0,
-      }));
-    }
 
     attendance.forEach((item) => {
       const date = new Date(item.date);
-
       if (Number.isNaN(date.getTime())) return;
 
       const week = Math.min(Math.floor((date.getDate() - 1) / 7), 3);
+      buckets[week].count += 1;
 
       if (item.status === "PRESENT") {
         buckets[week].value += 100;
@@ -260,21 +240,18 @@ export default function FacultyDashboardPage() {
 
     return buckets.map((item) => ({
       label: item.label,
-      value: attendance.length
-        ? Math.round(item.value / Math.max(attendance.length / 4, 1))
-        : 0,
+      value: item.count ? Math.round(item.value / item.count) : 0,
     }));
   }, [attendance]);
 
   const recentResults = useMemo(
     () =>
       [...results]
-        .sort((a, b) => {
-          const aDate = new Date(a.createdAt ?? 0).getTime();
-          const bDate = new Date(b.createdAt ?? 0).getTime();
-
-          return bDate - aDate;
-        })
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt ?? 0).getTime() -
+            new Date(a.createdAt ?? 0).getTime(),
+        )
         .slice(0, 5),
     [results],
   );
@@ -304,15 +281,12 @@ export default function FacultyDashboardPage() {
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-red-400/15 bg-red-400/[0.07] text-red-300">
               <Activity size={24} />
             </div>
-
             <h1 className="mt-5 text-xl font-semibold text-white">
               Faculty command center unavailable
             </h1>
-
             <p className="mt-2 text-sm leading-6 text-slate-500">
               {errorMessage}
             </p>
-
             <button
               type="button"
               onClick={refreshAll}
@@ -335,7 +309,6 @@ export default function FacultyDashboardPage() {
       className="min-h-full pb-10"
     >
       <div className="mx-auto max-w-[1500px] space-y-6">
-        {/* HERO */}
         <motion.section
           variants={itemVariants}
           className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-cyan-400/[0.08] via-blue-500/[0.035] to-violet-500/[0.07] p-6 sm:p-8 lg:p-10"
@@ -349,14 +322,12 @@ export default function FacultyDashboardPage() {
                 <Sparkles size={13} />
                 Faculty Command Center
               </div>
-
               <h1 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl lg:text-5xl">
                 Academic{" "}
                 <span className="bg-gradient-to-r from-cyan-300 via-blue-400 to-violet-400 bg-clip-text text-transparent">
                   Control
                 </span>
               </h1>
-
               <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-400 sm:text-base">
                 Monitor your courses, students, attendance and academic
                 performance from one intelligent faculty workspace.
@@ -390,7 +361,6 @@ export default function FacultyDashboardPage() {
           </div>
         </motion.section>
 
-        {/* STATS */}
         <motion.section
           variants={containerVariants}
           className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
@@ -401,30 +371,26 @@ export default function FacultyDashboardPage() {
             value={String(activeCourses.length)}
             detail={`${courses.length} total courses loaded`}
           />
-
           <StatCard
             icon={Users}
             label="Students"
             value={String(students.length)}
-            detail="Students available in current data"
+            detail="Students available in your courses"
           />
-
           <StatCard
             icon={CalendarCheck2}
             label="Attendance"
             value={`${attendanceRate.toFixed(1)}%`}
             detail={`${presentCount} present · ${absentCount} absent`}
           />
-
           <StatCard
             icon={Award}
             label="Average Point"
             value={averageGradePoint.toFixed(2)}
-            detail={`${averageMarks.toFixed(1)}% average marks`}
+            detail={`${averageMarks.toFixed(1)} average marks`}
           />
         </motion.section>
 
-        {/* ANALYTICS */}
         <div className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
           <motion.section
             variants={itemVariants}
@@ -436,17 +402,14 @@ export default function FacultyDashboardPage() {
                   <div className="rounded-xl border border-cyan-400/10 bg-cyan-400/[0.06] p-2 text-cyan-300">
                     <TrendingUp size={16} />
                   </div>
-
                   <h2 className="text-base font-semibold text-white">
                     Attendance Pulse
                   </h2>
                 </div>
-
                 <p className="mt-2 text-xs text-slate-600">
-                  Attendance activity across the available records
+                  Attendance activity across your available records
                 </p>
               </div>
-
               <div className="rounded-xl border border-emerald-400/10 bg-emerald-400/[0.05] px-3 py-2 text-xs text-emerald-300">
                 {attendanceRate.toFixed(1)}% health
               </div>
@@ -463,44 +426,26 @@ export default function FacultyDashboardPage() {
                       x2="0"
                       y2="1"
                     >
-                      <stop
-                        offset="0%"
-                        stopColor="#22d3ee"
-                        stopOpacity={0.28}
-                      />
-                      <stop
-                        offset="100%"
-                        stopColor="#22d3ee"
-                        stopOpacity={0}
-                      />
+                      <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.28} />
+                      <stop offset="100%" stopColor="#22d3ee" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-
                   <CartesianGrid
                     stroke="rgba(255,255,255,0.06)"
                     vertical={false}
                   />
-
                   <XAxis
                     dataKey="label"
                     axisLine={false}
                     tickLine={false}
-                    tick={{
-                      fill: "#475569",
-                      fontSize: 11,
-                    }}
+                    tick={{ fill: "#475569", fontSize: 11 }}
                   />
-
                   <YAxis
                     axisLine={false}
                     tickLine={false}
                     width={35}
-                    tick={{
-                      fill: "#475569",
-                      fontSize: 11,
-                    }}
+                    tick={{ fill: "#475569", fontSize: 11 }}
                   />
-
                   <Tooltip
                     contentStyle={{
                       background: "#07101f",
@@ -508,11 +453,8 @@ export default function FacultyDashboardPage() {
                       borderRadius: 14,
                       color: "#fff",
                     }}
-                    labelStyle={{
-                      color: "#94a3b8",
-                    }}
+                    labelStyle={{ color: "#94a3b8" }}
                   />
-
                   <Area
                     type="monotone"
                     dataKey="value"
@@ -525,7 +467,6 @@ export default function FacultyDashboardPage() {
             </div>
           </motion.section>
 
-          {/* QUICK ACTIONS */}
           <motion.section
             variants={itemVariants}
             className="rounded-3xl border border-white/10 bg-white/[0.025] p-5 backdrop-blur-xl sm:p-6"
@@ -534,7 +475,6 @@ export default function FacultyDashboardPage() {
               <div className="rounded-xl border border-violet-400/10 bg-violet-400/[0.06] p-2 text-violet-300">
                 <Zap size={16} />
               </div>
-
               <div>
                 <h2 className="text-base font-semibold text-white">
                   Quick Actions
@@ -552,21 +492,18 @@ export default function FacultyDashboardPage() {
                 description="Review assigned course information"
                 href="/faculty/courses"
               />
-
               <QuickAction
                 icon={Users}
                 title="Students"
                 description="Explore students connected to your courses"
                 href="/faculty/students"
               />
-
               <QuickAction
                 icon={CalendarCheck2}
                 title="Attendance"
                 description="Record and manage attendance"
                 href="/faculty/attendance"
               />
-
               <QuickAction
                 icon={Award}
                 title="Results"
@@ -577,9 +514,7 @@ export default function FacultyDashboardPage() {
           </motion.section>
         </div>
 
-        {/* LOWER GRID */}
         <div className="grid gap-6 lg:grid-cols-2">
-          {/* COURSES */}
           <motion.section
             variants={itemVariants}
             className="rounded-3xl border border-white/10 bg-white/[0.025] p-5 backdrop-blur-xl sm:p-6"
@@ -592,12 +527,10 @@ export default function FacultyDashboardPage() {
                     Active Courses
                   </h2>
                 </div>
-
                 <p className="mt-1 text-xs text-slate-600">
                   Current course activity
                 </p>
               </div>
-
               <a
                 href="/faculty/courses"
                 className="text-xs font-medium text-cyan-300 transition hover:text-cyan-200"
@@ -620,23 +553,19 @@ export default function FacultyDashboardPage() {
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-400/10 bg-cyan-400/[0.05] text-cyan-300">
                       <GraduationCap size={18} />
                     </div>
-
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-md border border-cyan-400/10 bg-cyan-400/[0.04] px-2 py-1 text-[9px] font-semibold tracking-wider text-cyan-300">
                           {course.code}
                         </span>
-
                         <span className="text-[10px] text-slate-600">
                           {course.credit} credit
                         </span>
                       </div>
-
                       <p className="mt-2 truncate text-sm font-medium text-white">
                         {course.title}
                       </p>
                     </div>
-
                     <div className="hidden text-right sm:block">
                       <p className="text-[10px] uppercase tracking-wider text-slate-600">
                         Capacity
@@ -651,7 +580,6 @@ export default function FacultyDashboardPage() {
             </div>
           </motion.section>
 
-          {/* RECENT RESULTS */}
           <motion.section
             variants={itemVariants}
             className="rounded-3xl border border-white/10 bg-white/[0.025] p-5 backdrop-blur-xl sm:p-6"
@@ -664,12 +592,10 @@ export default function FacultyDashboardPage() {
                     Recent Results
                   </h2>
                 </div>
-
                 <p className="mt-1 text-xs text-slate-600">
                   Latest academic records
                 </p>
               </div>
-
               <a
                 href="/faculty/results"
                 className="text-xs font-medium text-violet-300 transition hover:text-violet-200"
@@ -698,7 +624,6 @@ export default function FacultyDashboardPage() {
                     >
                       {result.grade.replace("_", "+")}
                     </div>
-
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-white">
                         {result.course?.title ||
@@ -706,12 +631,10 @@ export default function FacultyDashboardPage() {
                           result.course?.code ||
                           "Course"}
                       </p>
-
                       <p className="mt-1 text-xs text-slate-600">
-                        {result.marks}% · {result.gradePoint.toFixed(2)} point
+                        {result.marks}% · {Number(result.gradePoint || 0).toFixed(2)} point
                       </p>
                     </div>
-
                     <div className="text-right">
                       <p className="text-[10px] uppercase tracking-wider text-slate-600">
                         Score
@@ -727,7 +650,6 @@ export default function FacultyDashboardPage() {
           </motion.section>
         </div>
 
-        {/* ATTENDANCE BREAKDOWN */}
         <motion.section
           variants={itemVariants}
           className="rounded-3xl border border-white/10 bg-white/[0.025] p-5 backdrop-blur-xl sm:p-6"
@@ -740,12 +662,10 @@ export default function FacultyDashboardPage() {
                   Attendance Overview
                 </h2>
               </div>
-
               <p className="mt-1 text-xs text-slate-600">
-                Current attendance records available to your faculty account
+                Attendance records available to your faculty account
               </p>
             </div>
-
             <a
               href="/faculty/attendance"
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] px-4 py-2.5 text-xs font-medium text-slate-300 transition hover:border-emerald-400/20 hover:text-emerald-300"
@@ -764,7 +684,6 @@ export default function FacultyDashboardPage() {
                 {presentCount}
               </p>
             </div>
-
             <div className="rounded-2xl border border-amber-400/10 bg-amber-400/[0.035] p-5">
               <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">
                 Late
@@ -773,7 +692,6 @@ export default function FacultyDashboardPage() {
                 {lateCount}
               </p>
             </div>
-
             <div className="rounded-2xl border border-red-400/10 bg-red-400/[0.035] p-5">
               <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">
                 Absent

@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -20,18 +21,17 @@ export type ResultGrade =
   | "D"
   | "F";
 
+export type UserRole = "ADMIN" | "FACULTY" | "STUDENT";
+
 export interface Result {
   id: string;
-
   studentId: string;
   courseId: string;
   facultyId: string;
-
   marks: number;
   grade: ResultGrade;
   gradePoint: number;
   remarks?: string | null;
-
   createdAt?: string;
   updatedAt?: string;
 
@@ -96,50 +96,37 @@ export interface UpdateResultPayload {
 }
 
 async function fetchResults(
+  role: UserRole,
   grade?: ResultGrade,
 ): Promise<Result[]> {
-  const response =
-    await api.get<ResultsResponse>(
-      "/results",
-      {
-        params: {
-          page: 1,
-          limit: 10,
-          ...(grade ? { grade } : {}),
-        },
+  const endpoint =
+    role === "FACULTY"
+      ? "/results/my-courses"
+      : role === "STUDENT"
+        ? "/results/my"
+        : "/results";
+
+  const response = await api.get<ResultsResponse>(
+    endpoint,
+    {
+      params: {
+        page: 1,
+        limit: 10,
+        ...(grade ? { grade } : {}),
       },
-    );
+    },
+  );
 
   return response.data.data?.data ?? [];
 }
 
-async function fetchMyResults(): Promise<Result[]> {
-  const response =
-    await api.get<ResultsResponse>(
-      "/results/my",
-      {
-        params: {
-          page: 1,
-          limit: 10,
-        },
-      },
-    );
-
-  return response.data.data?.data ?? [];
-}
-
-async function fetchResult(
-  id: string,
-): Promise<Result> {
-  const response =
-    await api.get<ResultResponse>(
-      `/results/${id}`,
-    );
+async function fetchResult(id: string): Promise<Result> {
+  const response = await api.get<ResultResponse>(
+    `/results/${id}`,
+  );
 
   if (!response.data.data) {
-    throw new Error(
-      "Result data was not returned.",
-    );
+    throw new Error("Result data was not returned.");
   }
 
   return response.data.data;
@@ -148,11 +135,10 @@ async function fetchResult(
 async function createResult(
   payload: CreateResultPayload,
 ): Promise<ResultResponse> {
-  const response =
-    await api.post<ResultResponse>(
-      "/results",
-      payload,
-    );
+  const response = await api.post<ResultResponse>(
+    "/results",
+    payload,
+  );
 
   return response.data;
 }
@@ -160,38 +146,37 @@ async function createResult(
 async function updateResult(
   payload: UpdateResultPayload,
 ): Promise<ResultResponse> {
-  const response =
-    await api.patch<ResultResponse>(
-      `/results/${payload.id}`,
-      {
-        marks: payload.marks,
-        grade: payload.grade,
-        gradePoint: payload.gradePoint,
-      },
-    );
+  const response = await api.patch<ResultResponse>(
+    `/results/${payload.id}`,
+    {
+      marks: payload.marks,
+      grade: payload.grade,
+      gradePoint: payload.gradePoint,
+    },
+  );
 
   return response.data;
 }
 
-async function deleteResult(
-  id: string,
-): Promise<void> {
+async function deleteResult(id: string): Promise<void> {
   await api.delete(`/results/${id}`);
 }
 
 export function useResults(
+  role: UserRole = "ADMIN",
   grade?: ResultGrade,
 ) {
   return useQuery({
     queryKey: [
       "results",
       {
+        role,
         page: 1,
         limit: 10,
         grade: grade ?? "ALL",
       },
     ],
-    queryFn: () => fetchResults(grade),
+    queryFn: () => fetchResults(role, grade),
   });
 }
 
@@ -204,17 +189,26 @@ export function useMyResults() {
         limit: 10,
       },
     ],
-    queryFn: fetchMyResults,
+    queryFn: async () => {
+      const response = await api.get<ResultsResponse>(
+        "/results/my",
+        {
+          params: {
+            page: 1,
+            limit: 10,
+          },
+        },
+      );
+
+      return response.data.data?.data ?? [];
+    },
   });
 }
 
-export function useResult(
-  id: string | null,
-) {
+export function useResult(id: string | null) {
   return useQuery({
     queryKey: ["result", id],
-    queryFn: () =>
-      fetchResult(id as string),
+    queryFn: () => fetchResult(id as string),
     enabled: Boolean(id),
   });
 }
@@ -224,7 +218,6 @@ export function useCreateResult() {
 
   return useMutation({
     mutationFn: createResult,
-
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["results"],
@@ -242,7 +235,6 @@ export function useUpdateResult() {
 
   return useMutation({
     mutationFn: updateResult,
-
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["results"],
@@ -264,7 +256,6 @@ export function useDeleteResult() {
 
   return useMutation({
     mutationFn: deleteResult,
-
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({
         queryKey: ["results"],

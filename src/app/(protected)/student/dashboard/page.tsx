@@ -320,7 +320,7 @@ export default function StudentDashboardPage() {
   isLoading: enrollmentsLoading,
   isError: enrollmentsError,
   refetch: refetchEnrollments,
-} = useEnrollments();
+} = useEnrollments("STUDENT")
 
   const {
     data: attendance = [],

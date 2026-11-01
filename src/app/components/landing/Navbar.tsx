@@ -113,14 +113,14 @@ export default function Navbar() {
             </Link>
 
             <Link
-              href="/#features"
+              href="/features"
               className="text-xs font-medium text-slate-400 transition hover:text-white"
             >
               Features
             </Link>
 
             <Link
-              href="/#about"
+              href="/about"
               className="text-xs font-medium text-slate-400 transition hover:text-white"
             >
               About
@@ -255,7 +255,7 @@ export default function Navbar() {
                   </Link>
 
                   <Link
-                    href="/#features"
+                    href="/features"
                     onClick={() => setMobileOpen(false)}
                     className="block rounded-xl px-3 py-3 text-sm text-slate-400 transition hover:bg-white/[0.04] hover:text-white"
                   >
@@ -263,7 +263,7 @@ export default function Navbar() {
                   </Link>
 
                   <Link
-                    href="/#about"
+                    href="/about"
                     onClick={() => setMobileOpen(false)}
                     className="block rounded-xl px-3 py-3 text-sm text-slate-400 transition hover:bg-white/[0.04] hover:text-white"
                   >

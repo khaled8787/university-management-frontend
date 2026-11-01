@@ -8,12 +8,23 @@ import {
 
 import { api } from "@/lib/api";
 
+// --------------------------------------------------
+// Types
+// --------------------------------------------------
+
+/**
+ * Prisma Decimal values may arrive from the API as
+ * either numbers or strings, depending on serialization.
+ */
+export type CourseFee = number | string;
+
 export interface Course {
   id: string;
   code: string;
   title: string;
   description?: string | null;
   credit: number;
+  fee: CourseFee;
   departmentId: string;
   facultyId: string;
   semester: number;
@@ -60,6 +71,7 @@ export interface CreateCoursePayload {
   title: string;
   description: string;
   credit: number;
+  fee: number;
   departmentId: string;
   facultyId: string;
   semester: number;
@@ -68,14 +80,19 @@ export interface CreateCoursePayload {
 
 export interface UpdateCoursePayload {
   id: string;
-  title: string;
-  capacity: number;
+  title?: string;
+  capacity?: number;
+  fee?: number;
 }
 
 export interface UpdateCourseStatusPayload {
   id: string;
   isActive: boolean;
 }
+
+// --------------------------------------------------
+// API functions
+// --------------------------------------------------
 
 async function fetchCourses(): Promise<Course[]> {
   const response = await api.get<CoursesResponse>("/courses", {
@@ -89,9 +106,7 @@ async function fetchCourses(): Promise<Course[]> {
 }
 
 async function fetchCourse(id: string): Promise<Course> {
-  const response = await api.get<CourseResponse>(
-    `/courses/${id}`,
-  );
+  const response = await api.get<CourseResponse>(`/courses/${id}`);
 
   if (!response.data.data) {
     throw new Error("Course data was not returned.");
@@ -114,12 +129,11 @@ async function createCourse(
 async function updateCourse(
   payload: UpdateCoursePayload,
 ): Promise<CourseResponse> {
+  const { id, ...updateData } = payload;
+
   const response = await api.patch<CourseResponse>(
-    `/courses/${payload.id}`,
-    {
-      title: payload.title,
-      capacity: payload.capacity,
-    },
+    `/courses/${id}`,
+    updateData,
   );
 
   return response.data;
@@ -142,6 +156,10 @@ async function deleteCourse(id: string): Promise<void> {
   await api.delete(`/courses/${id}`);
 }
 
+// --------------------------------------------------
+// React Query hooks
+// --------------------------------------------------
+
 export function useCourses() {
   return useQuery({
     queryKey: ["courses", { page: 1, limit: 10 }],
@@ -152,7 +170,7 @@ export function useCourses() {
 export function useCourse(id: string | null) {
   return useQuery({
     queryKey: ["course", id],
-    queryFn: () => fetchCourse(id as string),
+    queryFn: () => fetchCourse(id!),
     enabled: Boolean(id),
   });
 }
@@ -163,8 +181,8 @@ export function useCreateCourse() {
   return useMutation({
     mutationFn: createCourse,
 
-    onSuccess: () => {
-      queryClient.invalidateQueries({
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
         queryKey: ["courses"],
       });
     },
@@ -177,14 +195,15 @@ export function useUpdateCourse() {
   return useMutation({
     mutationFn: updateCourse,
 
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: ["courses"],
-      });
-
-      queryClient.invalidateQueries({
-        queryKey: ["course", variables.id],
-      });
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["courses"],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["course", variables.id],
+        }),
+      ]);
     },
   });
 }
@@ -195,14 +214,15 @@ export function useUpdateCourseStatus() {
   return useMutation({
     mutationFn: updateCourseStatus,
 
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: ["courses"],
-      });
-
-      queryClient.invalidateQueries({
-        queryKey: ["course", variables.id],
-      });
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["courses"],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["course", variables.id],
+        }),
+      ]);
     },
   });
 }
@@ -213,14 +233,15 @@ export function useDeleteCourse() {
   return useMutation({
     mutationFn: deleteCourse,
 
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({
-        queryKey: ["courses"],
-      });
-
-      queryClient.removeQueries({
-        queryKey: ["course", id],
-      });
+    onSuccess: async (_, id) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["courses"],
+        }),
+        queryClient.removeQueries({
+          queryKey: ["course", id],
+        }),
+      ]);
     },
   });
 }

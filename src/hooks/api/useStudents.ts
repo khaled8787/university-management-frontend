@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -7,6 +8,8 @@ import {
 } from "@tanstack/react-query";
 
 import { api, getApiErrorMessage } from "@/lib/api";
+
+export type UserRole = "ADMIN" | "FACULTY";
 
 export interface Student {
   id: string;
@@ -45,9 +48,14 @@ export interface UpdateStudentPayload {
   address: string;
 }
 
-async function fetchStudents(): Promise<Student[]> {
+async function fetchStudents(role: UserRole): Promise<Student[]> {
   try {
-    const response = await api.get<StudentsResponse>("/students", {
+    const endpoint =
+      role === "FACULTY"
+        ? "/students/my-courses"
+        : "/students";
+
+    const response = await api.get<StudentsResponse>(endpoint, {
       params: {
         page: 1,
         limit: 10,
@@ -64,9 +72,7 @@ async function fetchStudents(): Promise<Student[]> {
 
 async function fetchStudent(id: string): Promise<Student> {
   try {
-    const response = await api.get<StudentResponse>(
-      `/students/${id}`,
-    );
+    const response = await api.get<StudentResponse>(`/students/${id}`);
 
     if (!response.data.data) {
       throw new Error("Student data was not returned.");
@@ -110,10 +116,10 @@ async function deleteStudent(id: string): Promise<void> {
   }
 }
 
-export function useStudents() {
+export function useStudents(role: UserRole = "ADMIN") {
   return useQuery({
-    queryKey: ["students", { page: 1, limit: 10 }],
-    queryFn: fetchStudents,
+    queryKey: ["students", { role, page: 1, limit: 10 }],
+    queryFn: () => fetchStudents(role),
   });
 }
 
