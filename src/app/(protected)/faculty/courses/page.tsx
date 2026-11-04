@@ -20,7 +20,7 @@ import {
 
 import {
   useCourse,
-  useCourses,
+  useMyCourses,
   type Course,
 } from "@/hooks/api/useCourses";
 import { getApiErrorMessage } from "@/lib/api";
@@ -474,8 +474,14 @@ function CourseDetailsModal({
 }
 
 export default function FacultyCoursesPage() {
-  const { data: courses = [], isLoading, isError, error, refetch, isFetching } =
-    useCourses();
+  const {
+  data: courses = [],
+  isLoading,
+  isError,
+  error,
+  refetch,
+  isFetching,
+} = useMyCourses();
 
   const [search, setSearch] = useState("");
   const [activeOnly, setActiveOnly] = useState(true);

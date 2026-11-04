@@ -222,7 +222,7 @@ export default function AdminAttendancePage() {
     refetch,
     isFetching,
   } =
-    useAttendances(currentFilter);
+    useAttendances("ADMIN", currentFilter);
 
   const selectedAttendance =
     useAttendance(selectedId);

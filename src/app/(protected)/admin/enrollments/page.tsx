@@ -475,7 +475,7 @@ export default function AdminEnrollmentsPage() {
     isError,
     isFetching,
     refetch,
-  } = useEnrollments(statusFilter);
+  } = useEnrollments("ADMIN", statusFilter);
 
   const updateMutation =
     useUpdateEnrollmentStatus();

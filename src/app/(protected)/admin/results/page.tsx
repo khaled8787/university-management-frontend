@@ -150,7 +150,7 @@ export default function AdminResultsPage() {
     isError,
     isFetching,
     refetch,
-  } = useResults(gradeFilter);
+  } = useResults("ADMIN", gradeFilter);
 
   const selectedResult =
     useResult(selectedId);

@@ -62,6 +62,9 @@ function statusStyle(
 
     case "CANCELLED":
       return "border-slate-400/20 bg-slate-400/10 text-slate-400";
+
+      case "REFUNDED":
+  return "border-purple-400/20 bg-purple-400/10 text-purple-300";
   }
 }
 
@@ -80,6 +83,9 @@ function statusIcon(
 
     case "CANCELLED":
       return X;
+
+      case "REFUNDED":
+  return CheckCircle2;
   }
 }
 

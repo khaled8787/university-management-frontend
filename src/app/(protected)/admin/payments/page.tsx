@@ -139,6 +139,13 @@ function statusConfig(status: PaymentStatus) {
       className:
         "border-slate-400/20 bg-slate-400/10 text-slate-300",
     },
+
+    REFUNDED: {
+  label: "Refunded",
+  icon: CheckCircle2,
+  className:
+    "border-purple-400/20 bg-purple-400/10 text-purple-300",
+},
   } as const;
 
   return config[status];

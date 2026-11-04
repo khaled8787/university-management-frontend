@@ -104,7 +104,16 @@ async function fetchCourses(): Promise<Course[]> {
 
   return response.data.data?.data ?? [];
 }
+async function fetchMyCourses(): Promise<Course[]> {
+  const response = await api.get<CoursesResponse>("/courses/my", {
+    params: {
+      page: 1,
+      limit: 10,
+    },
+  });
 
+  return response.data.data?.data ?? [];
+}
 async function fetchCourse(id: string): Promise<Course> {
   const response = await api.get<CourseResponse>(`/courses/${id}`);
 
@@ -164,6 +173,13 @@ export function useCourses() {
   return useQuery({
     queryKey: ["courses", { page: 1, limit: 10 }],
     queryFn: fetchCourses,
+  });
+}
+
+export function useMyCourses() {
+  return useQuery({
+    queryKey: ["my-courses", { page: 1, limit: 10 }],
+    queryFn: fetchMyCourses,
   });
 }
 
