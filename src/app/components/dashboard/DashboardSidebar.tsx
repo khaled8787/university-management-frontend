@@ -337,29 +337,7 @@ export default function DashboardSidebar({
             })}
           </nav>
 
-          {/* Secondary */}
-          <div className="mt-8">
-            <div
-              className={`mb-3 px-3 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-600 ${
-                collapsed ? "text-center" : ""
-              }`}
-            >
-              {collapsed ? "•••" : "System"}
-            </div>
-
-            <Link
-              href="/settings"
-              onClick={onMobileClose}
-              title={collapsed ? "Settings" : undefined}
-              className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-500 transition hover:bg-white/[0.035] hover:text-slate-200 ${
-                collapsed ? "justify-center" : ""
-              }`}
-            >
-              <Settings size={18} strokeWidth={1.6} />
-
-              {!collapsed && <span>Settings</span>}
-            </Link>
-          </div>
+          
         </div>
 
         {/* User */}
